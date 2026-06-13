@@ -199,7 +199,7 @@ export default function App() {
             <AlertCircle size={28} style={{ color: "var(--red)" }} />
           </div>
           <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Something went wrong</div>
-          <div style={{ fontSize: 13, color: "var(--w50)", lineHeight: 1.6, maxWidth: 300, margin: "0 auto" }}>{error}</div>
+          <div style={{ fontSize: 13, color: "var(--w50)", lineHeight: 1.6, maxWidth: 300, margin: "0 auto", whiteSpace: "pre-wrap" }}>{error}</div>
           <button onClick={handleFetch} style={{ marginTop: 20, padding: "10px 24px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--gold)", cursor: "pointer", fontSize: 13, fontFamily: "inherit", fontWeight: 500 }}>
             Try again
           </button>

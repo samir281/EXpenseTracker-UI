@@ -1,12 +1,19 @@
 const API_BASE = "https://expense-api-production-bf8c.up.railway.app";
 
 export async function fetchReport(date) {
-  const res = await fetch(`${API_BASE}/api/report?date=${date}`);
-  const json = await res.json();
-  if (!res.ok || !json.success) {
-    throw new Error(json.message || `Server error (${res.status})`);
+  try {
+    const res = await fetch(`${API_BASE}/api/report?date=${date}`);
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.message || `Server error (${res.status})`);
+    }
+    return json;
+  } catch (err) {
+    if (err.name === "TypeError" && err.message === "Failed to fetch") {
+      throw new Error("Cannot connect to server. Possible reasons:\n• Your network/ISP might be blocking the server\n• Try switching between WiFi and mobile data\n• Try a different browser (Chrome recommended)");
+    }
+    throw err;
   }
-  return json;
 }
 
 export async function askAI(question, transactions) {
