@@ -1,0 +1,217 @@
+:root {
+  --bg: #0A0A0A;
+  --card: #161616;
+  --card-hover: #1C1C1C;
+  --border: rgba(255, 255, 255, 0.06);
+  --gold: #C8A951;
+  --gold-dim: rgba(200, 169, 81, 0.12);
+  --gold-text: #E8D48B;
+  --w: #FFFFFF;
+  --w80: rgba(255, 255, 255, 0.80);
+  --w50: rgba(255, 255, 255, 0.50);
+  --w30: rgba(255, 255, 255, 0.25);
+  --w10: rgba(255, 255, 255, 0.06);
+  --red: #E8364E;
+  --red-bg: rgba(232, 54, 78, 0.10);
+  --green: #00C853;
+  --green-bg: rgba(0, 200, 83, 0.10);
+  --blue: #3B82F6;
+  --blue-bg: rgba(59, 130, 246, 0.10);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--w);
+  font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 0; }
+
+/* Card */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.glow {
+  box-shadow: 0 0 40px rgba(200, 169, 81, 0.04);
+}
+
+/* Category rows */
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0;
+}
+
+.cat-row:not(:last-child) {
+  border-bottom: 1px solid var(--w10);
+}
+
+.cat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.bar-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--w10);
+  width: 100%;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Transaction rows */
+.txn-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+}
+
+.txn-row:not(:last-child) {
+  border-bottom: 1px solid var(--w10);
+}
+
+/* Inputs */
+input, select {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  color: var(--w);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+input:focus, select:focus {
+  border-color: var(--gold);
+}
+
+input::placeholder {
+  color: var(--w30);
+}
+
+select {
+  appearance: none;
+  cursor: pointer;
+}
+
+select option {
+  background: var(--card);
+  color: var(--w);
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
+/* Bottom nav */
+.nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding: 6px 0 12px;
+  z-index: 10;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--w30);
+  transition: color 0.2s;
+}
+
+.nav-btn.active {
+  color: var(--gold);
+}
+
+/* Chat */
+.bubble {
+  padding: 12px 16px;
+  border-radius: 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-width: 85%;
+}
+
+.chip {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  border: 1px solid var(--w10);
+  background: transparent;
+  color: var(--w50);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.chip:hover {
+  border-color: var(--gold);
+  color: var(--gold-text);
+}
+
+.pill {
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
