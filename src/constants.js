@@ -24,6 +24,12 @@ export const CATEGORIES = {
   "Other Income":       { icon: Banknote,        color: "#22C55E" },
 };
 
+export const CATEGORY_NAMES = [
+  "Food Delivery", "Dining Out", "Quick Commerce", "Online Shopping",
+  "Cab / Ride", "Airlines / Flights", "Fuel", "Bills & Utilities",
+  "Entertainment", "Health", "Groceries", "Bill Payment", "Transfer/UPI", "Other",
+];
+
 export function getCategoryConfig(name) {
   return CATEGORIES[name] || CATEGORIES["Other"];
 }
