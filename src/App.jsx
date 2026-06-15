@@ -1,11 +1,164 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Wallet, Search, ChevronLeft, ChevronRight, RefreshCw,
   ArrowUpRight, ArrowDownLeft, CreditCard, Sparkles,
   ArrowLeftRight, Send, Loader2, AlertCircle, Pencil, Check, X, Plus,
+  LogOut, User,
 } from "lucide-react";
-import { fetchReport, askAI, saveOverride } from "./api";
+import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin } from "./api";
 import { getCategoryConfig, CATEGORY_NAMES, fmt, formatDateLong } from "./constants";
+
+// ─── Auth Screens ─────────────────────────────────────────────────────────────
+
+const PROFILE_COLORS = ["#C8A951", "#3B82F6", "#A855F7", "#22C55E"];
+
+function ProfileSelect({ onSelect }) {
+  const [profiles, setProfiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    fetchProfiles()
+      .then(setProfiles)
+      .catch(e => setErr(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 }}>
+      <div style={{ marginBottom: 40, textAlign: "center" }}>
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: "var(--gold-dim)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+          <Wallet size={26} style={{ color: "var(--gold)" }} />
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 500, marginBottom: 6 }}>Who's tracking?</div>
+        <div style={{ fontSize: 13, color: "var(--w30)" }}>Select your profile to continue</div>
+      </div>
+
+      {loading && <Loader2 size={28} className="spin" style={{ color: "var(--gold)" }} />}
+      {err && <div style={{ fontSize: 13, color: "var(--red)", textAlign: "center", maxWidth: 280 }}>{err}</div>}
+
+      {!loading && !err && (
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", justifyContent: "center" }}>
+          {profiles.map((p, i) => {
+            const color = PROFILE_COLORS[i % PROFILE_COLORS.length];
+            const initials = p.name.slice(0, 2).toUpperCase();
+            return (
+              <button
+                key={p.id}
+                onClick={() => onSelect(p)}
+                style={{
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
+                  background: "var(--card)", border: "1px solid var(--border)", borderRadius: 20,
+                  padding: "28px 32px", cursor: "pointer", fontFamily: "inherit",
+                  transition: "border-color 0.2s, transform 0.1s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.transform = "scale(1.03)"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.transform = "scale(1)"; }}
+              >
+                <div style={{ width: 72, height: 72, borderRadius: "50%", background: color + "22", border: `2px solid ${color}44`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <span style={{ fontSize: 26, fontWeight: 600, color }}>{initials}</span>
+                </div>
+                <span style={{ fontSize: 15, fontWeight: 500, color: "var(--w)" }}>{p.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PinEntry({ profile, onSuccess, onBack }) {
+  const [pin, setPin] = useState(["", "", "", ""]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const inputRefs = [useRef(), useRef(), useRef(), useRef()];
+
+  useEffect(() => { inputRefs[0].current?.focus(); }, []);
+
+  function handleDigit(index, value) {
+    if (!/^\d?$/.test(value)) return;
+    const next = [...pin];
+    next[index] = value;
+    setPin(next);
+    setError("");
+    if (value && index < 3) inputRefs[index + 1].current?.focus();
+    if (next.every(d => d !== "") && value) {
+      submitPin(next.join(""));
+    }
+  }
+
+  function handleKeyDown(index, e) {
+    if (e.key === "Backspace" && !pin[index] && index > 0) {
+      inputRefs[index - 1].current?.focus();
+    }
+  }
+
+  async function submitPin(code) {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await verifyPin(profile.id, code);
+      localStorage.setItem("token", result.token);
+      localStorage.setItem("profile", JSON.stringify(result.profile));
+      onSuccess(result.profile);
+    } catch (e) {
+      setError(e.message || "Incorrect PIN");
+      setPin(["", "", "", ""]);
+      setTimeout(() => inputRefs[0].current?.focus(), 50);
+    }
+    setLoading(false);
+  }
+
+  const color = PROFILE_COLORS[0];
+  const initials = profile.name.slice(0, 2).toUpperCase();
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 }}>
+      <div style={{ textAlign: "center", marginBottom: 36 }}>
+        <div style={{ width: 72, height: 72, borderRadius: "50%", background: color + "22", border: `2px solid ${color}44`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+          <span style={{ fontSize: 26, fontWeight: 600, color }}>{initials}</span>
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 4 }}>{profile.name}</div>
+        <div style={{ fontSize: 13, color: "var(--w30)" }}>Enter your 4-digit PIN</div>
+      </div>
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+        {pin.map((digit, i) => (
+          <input
+            key={i}
+            ref={inputRefs[i]}
+            type="password"
+            inputMode="numeric"
+            maxLength={1}
+            value={digit}
+            onChange={e => handleDigit(i, e.target.value)}
+            onKeyDown={e => handleKeyDown(i, e)}
+            disabled={loading}
+            style={{
+              width: 56, height: 64, textAlign: "center", fontSize: 24, fontWeight: 600,
+              borderRadius: 14, border: `2px solid ${error ? "var(--red)" : digit ? "var(--gold)" : "var(--border)"}`,
+              background: "var(--card)", color: "var(--w)", fontFamily: "inherit",
+              transition: "border-color 0.15s",
+            }}
+          />
+        ))}
+      </div>
+
+      {loading && <Loader2 size={20} className="spin" style={{ color: "var(--gold)", marginBottom: 12 }} />}
+      {error && <div style={{ fontSize: 13, color: "var(--red)", marginBottom: 12 }}>{error}</div>}
+
+      <button
+        onClick={onBack}
+        style={{ fontSize: 13, color: "var(--w30)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", marginTop: 8 }}
+      >
+        ← Back to profiles
+      </button>
+    </div>
+  );
+}
+
+// ─── Dashboard Components ─────────────────────────────────────────────────────
 
 function SummaryCard({ icon: Icon, label, value, colorVar }) {
   return (
@@ -80,7 +233,6 @@ function TransactionRow({ txn, onEditCategory }) {
   );
 }
 
-// Category Edit Modal
 function CategoryModal({ txn, onSave, onClose }) {
   const [selected, setSelected] = useState(txn.category);
   const [custom, setCustom] = useState("");
@@ -151,6 +303,45 @@ function CategoryModal({ txn, onSave, onClose }) {
 
 // ─── Main App ────────────────────────────────────────────────────────────────
 export default function App() {
+  // Auth state
+  const [authView, setAuthView] = useState(() => {
+    const token = localStorage.getItem("token");
+    const profile = localStorage.getItem("profile");
+    return token && profile ? "dashboard" : "profiles";
+  });
+  const [currentProfile, setCurrentProfile] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("profile")); } catch { return null; }
+  });
+  const [pendingProfile, setPendingProfile] = useState(null);
+
+  // Listen for 401 auth expiry from api.js
+  useEffect(() => {
+    function handleExpiry() {
+      setCurrentProfile(null);
+      setAuthView("profiles");
+    }
+    window.addEventListener("auth-expired", handleExpiry);
+    return () => window.removeEventListener("auth-expired", handleExpiry);
+  }, []);
+
+  function handleProfileSelect(profile) {
+    setPendingProfile(profile);
+    setAuthView("pin");
+  }
+
+  function handlePinSuccess(profile) {
+    setCurrentProfile(profile);
+    setAuthView("dashboard");
+  }
+
+  function handleLogout() {
+    localStorage.clear();
+    setCurrentProfile(null);
+    setPendingProfile(null);
+    setAuthView("profiles");
+  }
+
+  // Dashboard state
   const [tab, setTab] = useState("home");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [data, setData] = useState(null);
@@ -193,7 +384,6 @@ export default function App() {
   }
 
   function handleCategorySave(merchant, newCategory) {
-    // Update local state so UI reflects the change immediately
     if (data) {
       const updated = { ...data };
       updated.transactions = updated.transactions.map(t =>
@@ -202,7 +392,6 @@ export default function App() {
       updated.billPayments = updated.billPayments.map(t =>
         t.merchant === merchant ? { ...t, category: newCategory } : t
       );
-      // Recalculate categories
       const debits = updated.transactions.filter(t => t.type === "debit" && t.category !== "Bill Payment");
       const totalSpent = Math.round(debits.reduce((s, t) => s + t.amount, 0));
       const catMap = {};
@@ -220,6 +409,22 @@ export default function App() {
     setEditTxn(null);
   }
 
+  // ── Auth screens ──────────────────────────────────────────────────────────
+  if (authView === "profiles") {
+    return <ProfileSelect onSelect={handleProfileSelect} />;
+  }
+
+  if (authView === "pin") {
+    return (
+      <PinEntry
+        profile={pendingProfile}
+        onSuccess={handlePinSuccess}
+        onBack={() => setAuthView("profiles")}
+      />
+    );
+  }
+
+  // ── Dashboard ─────────────────────────────────────────────────────────────
   const txns = data?.transactions || [];
   const bills = data?.billPayments || [];
   const summary = data?.summary || {};
@@ -239,7 +444,6 @@ export default function App() {
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
 
-      {/* Category Edit Modal */}
       {editTxn && <CategoryModal txn={editTxn} onSave={handleCategorySave} onClose={() => setEditTxn(null)} />}
 
       {/* Header */}
@@ -249,8 +453,20 @@ export default function App() {
             <div style={{ width: 40, height: 40, borderRadius: 12, background: "var(--gold-dim)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Wallet size={20} style={{ color: "var(--gold)" }} />
             </div>
-            <span style={{ fontSize: 18, fontWeight: 500 }}>Expense Tracker</span>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 500 }}>Expense Tracker</div>
+              {currentProfile && (
+                <div style={{ fontSize: 11, color: "var(--w30)", marginTop: 1 }}>{currentProfile.name}</div>
+              )}
+            </div>
           </div>
+          <button
+            onClick={handleLogout}
+            title="Switch profile"
+            style={{ width: 36, height: 36, borderRadius: 10, background: "var(--card)", border: "1px solid var(--border)", color: "var(--w30)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <LogOut size={16} />
+          </button>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button onClick={() => shiftDate(-1)} style={{ width: 36, height: 36, borderRadius: 10, background: "var(--card)", border: "1px solid var(--border)", color: "var(--w50)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><ChevronLeft size={18} /></button>

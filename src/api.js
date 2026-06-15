@@ -1,45 +1,95 @@
 const API_BASE = "https://expense-api-production-bf8c.up.railway.app";
 
-export async function fetchReport(date) {
+async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem("token");
+
+  let res;
   try {
-    const res = await fetch(`${API_BASE}/api/report?date=${date}`);
-    const json = await res.json();
-    if (!res.ok || !json.success) {
-      throw new Error(json.message || `Server error (${res.status})`);
-    }
-    return json;
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
   } catch (err) {
-    if (err.name === "TypeError" && err.message === "Failed to fetch") {
+    if (err.name === "TypeError") {
       throw new Error("Cannot connect to server.\n• Check internet connection\n• Try a different browser");
     }
     throw err;
   }
+
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Server error (${res.status}): received HTML instead of JSON`);
+  }
+
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error(`Server error (${res.status}): invalid JSON response`);
+  }
+
+  if (res.status === 401) {
+    localStorage.clear();
+    window.dispatchEvent(new Event("auth-expired"));
+    return null;
+  }
+
+  return { res, data };
+}
+
+export async function fetchProfiles() {
+  const result = await apiFetch("/api/profiles");
+  if (!result) return [];
+  return result.data.profiles || [];
+}
+
+export async function verifyPin(profileId, pin) {
+  const result = await apiFetch("/api/profiles/verify", {
+    method: "POST",
+    body: JSON.stringify({ profile_id: profileId, pin }),
+  });
+  if (!result) throw new Error("Request failed");
+  const { res, data } = result;
+  if (!res.ok || !data.success) throw new Error(data.message || "Incorrect PIN");
+  return data;
+}
+
+export async function fetchReport(date) {
+  const result = await apiFetch(`/api/report?date=${date}`);
+  if (!result) throw new Error("Login required");
+  const { res, data } = result;
+  if (!res.ok || !data.success) throw new Error(data.message || `Server error (${res.status})`);
+  return data;
 }
 
 export async function askAI(question, transactions) {
-  const res = await fetch(`${API_BASE}/api/ai-chat`, {
+  const result = await apiFetch("/api/ai-chat", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, transactions }),
   });
-  const json = await res.json();
-  if (!res.ok || !json.success) throw new Error(json.message || "AI chat failed");
-  return json.answer;
+  if (!result) throw new Error("Login required");
+  const { res, data } = result;
+  if (!res.ok || !data.success) throw new Error(data.message || "AI chat failed");
+  return data.answer;
 }
 
 export async function saveOverride(merchant, category) {
-  const res = await fetch(`${API_BASE}/api/override`, {
+  const result = await apiFetch("/api/override", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ merchant, category }),
   });
-  const json = await res.json();
-  if (!res.ok || !json.success) throw new Error(json.message || "Failed to save");
-  return json;
+  if (!result) throw new Error("Login required");
+  const { res, data } = result;
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to save");
+  return data;
 }
 
 export async function getOverrides() {
-  const res = await fetch(`${API_BASE}/api/overrides`);
-  const json = await res.json();
-  return json.overrides || {};
+  const result = await apiFetch("/api/overrides");
+  if (!result) return {};
+  return result.data.overrides || {};
 }
