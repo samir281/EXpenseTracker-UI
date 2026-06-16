@@ -93,3 +93,26 @@ export async function getOverrides() {
   if (!result) return {};
   return result.data.overrides || {};
 }
+
+export async function submitSMS(text, date) {
+  const result = await apiFetch("/api/sms-inbox", {
+    method: "POST",
+    body: JSON.stringify({ text, date }),
+  });
+  if (!result) throw new Error("Login required");
+  const { res, data } = result;
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to save SMS");
+  return data;
+}
+
+export async function fetchSMSInbox(date) {
+  const result = await apiFetch(`/api/sms-inbox?date=${date}`);
+  if (!result) return [];
+  return result.data.entries || [];
+}
+
+export async function deleteSMSEntry(id) {
+  const result = await apiFetch(`/api/sms-inbox/${id}`, { method: "DELETE" });
+  if (!result) throw new Error("Login required");
+  return result.data;
+}

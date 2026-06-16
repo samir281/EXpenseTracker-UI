@@ -3,9 +3,9 @@ import {
   Wallet, Search, ChevronLeft, ChevronRight, RefreshCw,
   ArrowUpRight, ArrowDownLeft, CreditCard, Sparkles,
   ArrowLeftRight, Send, Loader2, AlertCircle, Pencil, Check, X, Plus,
-  LogOut, User,
+  LogOut, User, MessageSquare, Trash2,
 } from "lucide-react";
-import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin } from "./api";
+import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin, submitSMS, fetchSMSInbox, deleteSMSEntry } from "./api";
 import { getCategoryConfig, CATEGORY_NAMES, fmt, formatDateLong } from "./constants";
 
 // ─── Auth Screens ─────────────────────────────────────────────────────────────
@@ -301,6 +301,131 @@ function CategoryModal({ txn, onSave, onClose }) {
   );
 }
 
+// ─── SMS Tab ─────────────────────────────────────────────────────────────────
+function SmsTab({ date }) {
+  const [text, setText] = useState("");
+  const [smsDate, setSmsDate] = useState(date);
+  const [entries, setEntries] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [loadingEntries, setLoadingEntries] = useState(false);
+  const [lastResult, setLastResult] = useState(undefined);
+
+  useEffect(() => {
+    setSmsDate(date);
+    loadEntries(date);
+  }, [date]);
+
+  async function loadEntries(d) {
+    setLoadingEntries(true);
+    try { setEntries(await fetchSMSInbox(d)); } catch {}
+    setLoadingEntries(false);
+  }
+
+  async function handleSubmit() {
+    if (!text.trim()) return;
+    setSaving(true);
+    setLastResult(null);
+    try {
+      const result = await submitSMS(text.trim(), smsDate);
+      setLastResult(result.parsed);
+      setText("");
+      await loadEntries(smsDate);
+    } catch (e) {
+      alert("Failed: " + e.message);
+    }
+    setSaving(false);
+  }
+
+  async function handleDelete(id) {
+    try {
+      await deleteSMSEntry(id);
+      setEntries(prev => prev.filter(e => e.id !== id));
+    } catch (e) {
+      alert("Failed to delete: " + e.message);
+    }
+  }
+
+  return (
+    <div style={{ padding: "0 20px" }} className="fade-in">
+      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Add SMS manually</div>
+        <div style={{ fontSize: 12, color: "var(--w30)", marginBottom: 14 }}>Paste a bank SMS — it will be encrypted and included in your report</div>
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder="e.g. Sent Rs.500 from Kotak Bank AC X5658 to merchant@upi"
+          rows={4}
+          style={{ width: "100%", marginBottom: 12, fontFamily: "inherit", fontSize: 13, resize: "vertical", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--w)", padding: "10px 14px", boxSizing: "border-box" }}
+        />
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: "var(--w30)", marginBottom: 4 }}>Date</div>
+            <input type="date" value={smsDate} onChange={e => setSmsDate(e.target.value)} style={{ width: "100%" }} />
+          </div>
+        </div>
+        {lastResult !== undefined && lastResult !== null && (
+          <div style={{ padding: "10px 14px", background: "var(--green-bg)", borderRadius: 10, marginBottom: 12, fontSize: 13 }}>
+            ✅ Parsed: {lastResult.type === "debit" ? "-" : "+"}₹{lastResult.amount} · {lastResult.merchant} · {lastResult.bank}
+          </div>
+        )}
+        {lastResult === null && lastResult !== undefined && (
+          <div style={{ padding: "10px 14px", background: "var(--w10)", borderRadius: 10, marginBottom: 12, fontSize: 13, color: "var(--w50)" }}>
+            ⚠️ Saved but could not parse transaction — SMS format may not be supported
+          </div>
+        )}
+        <button
+          onClick={handleSubmit}
+          disabled={saving || !text.trim()}
+          style={{ width: "100%", padding: 12, background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 12, cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: saving || !text.trim() ? 0.5 : 1 }}
+        >
+          {saving ? <Loader2 size={16} className="spin" /> : <Plus size={16} />}
+          {saving ? "Saving..." : "Save SMS"}
+        </button>
+      </div>
+
+      {loadingEntries && <div style={{ textAlign: "center", padding: 20 }}><Loader2 size={20} className="spin" style={{ color: "var(--gold)" }} /></div>}
+
+      {!loadingEntries && entries.length > 0 && (
+        <div>
+          <div style={{ fontSize: 12, color: "var(--w30)", marginBottom: 10 }}>{entries.length} saved for {smsDate}</div>
+          <div className="card">
+            {entries.map((entry, i) => (
+              <div key={entry.id} style={{ padding: "14px 20px", borderBottom: i < entries.length - 1 ? "1px solid var(--border)" : "none", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--gold-dim)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <MessageSquare size={16} style={{ color: "var(--gold)" }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {entry.parsed ? (
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>
+                      <span style={{ color: entry.parsed.type === "debit" ? "var(--red)" : "var(--green)" }}>{entry.parsed.type === "debit" ? "-" : "+"}₹{fmt(entry.parsed.amount)}</span>
+                      {" · "}{entry.parsed.merchant}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 13, color: "var(--w50)" }}>Could not parse</div>
+                  )}
+                  <div style={{ fontSize: 11, color: "var(--w30)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.preview}</div>
+                </div>
+                <button
+                  onClick={() => handleDelete(entry.id)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--w30)", flexShrink: 0, padding: 4, display: "flex", alignItems: "center" }}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!loadingEntries && entries.length === 0 && (
+        <div style={{ textAlign: "center", padding: "32px 20px", color: "var(--w30)", fontSize: 13 }}>
+          No SMS saved for {smsDate}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main App ────────────────────────────────────────────────────────────────
 export default function App() {
   // Auth state
@@ -368,7 +493,11 @@ export default function App() {
   function shiftDate(days) {
     const d = new Date(date + "T00:00:00");
     d.setDate(d.getDate() + days);
-    if (d <= new Date()) setDate(d.toISOString().split("T")[0]);
+    const pad = n => String(n).padStart(2, "0");
+    const dStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+    if (dStr <= todayStr) setDate(dStr);
   }
 
   async function handleAsk() {
@@ -564,6 +693,11 @@ export default function App() {
         </div>
       )}
 
+      {/* SMS INBOX */}
+      {tab === "sms" && (
+        <SmsTab date={date} />
+      )}
+
       {/* AI CHAT */}
       {data && !loading && tab === "insights" && (
         <div style={{ padding: "0 20px" }} className="fade-in">
@@ -590,7 +724,7 @@ export default function App() {
 
       {/* Nav */}
       <div className="nav">
-        {[{ id: "home", label: "Home", icon: Wallet }, { id: "transactions", label: "Activity", icon: ArrowLeftRight }, { id: "insights", label: "AI", icon: Sparkles }].map(t => {
+        {[{ id: "home", label: "Home", icon: Wallet }, { id: "transactions", label: "Activity", icon: ArrowLeftRight }, { id: "sms", label: "SMS", icon: MessageSquare }, { id: "insights", label: "AI", icon: Sparkles }].map(t => {
           const Icon = t.icon; const active = tab === t.id;
           return <button key={t.id} className={`nav-btn ${active ? "active" : ""}`} onClick={() => setTab(t.id)}><Icon size={22} /><span style={{ fontWeight: active ? 500 : 400 }}>{t.label}</span>{active && <div style={{ width: 4, height: 4, borderRadius: 2, background: "var(--gold)", marginTop: 2 }} />}</button>;
         })}
