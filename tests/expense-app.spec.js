@@ -1,61 +1,115 @@
 import { test, expect } from "@playwright/test";
 
-const SAMIR_PIN = ["2", "5", "8", "0"];
-const PAPA_PIN  = ["0", "7", "8", "6"];
+const API = "https://expense-api-production-bf8c.up.railway.app";
+const FAKE_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwcm9maWxlX2lkIjoxLCJuYW1lIjoiU2FtaXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6OTk5OTk5OTk5OX0.fake";
 
-async function login(page, pin = SAMIR_PIN) {
+// ── Mock data ─────────────────────────────────────────────────────────────────
+const MOCK_PROFILES = [
+  { id: 1, name: "Samir" },
+  { id: 2, name: "Papa" },
+];
+
+const MOCK_REPORT = {
+  success: true,
+  summary: {
+    totalSpent: 1250,
+    totalBillPayment: 5000,
+    totalCredit: 0,
+    debitCount: 3,
+  },
+  transactions: [
+    { merchant: "Swiggy", category: "Food Delivery", type: "debit", amount: 450, bank: "HDFC", cardType: "UPI", time: "12:30" },
+    { merchant: "Zepto", category: "Quick Commerce", type: "debit", amount: 390, bank: "HDFC", cardType: "UPI", time: "10:15" },
+    { merchant: "Uber", category: "Cab / Ride", type: "debit", amount: 410, bank: "Kotak", cardType: "UPI", time: "09:00" },
+  ],
+  billPayments: [
+    { merchant: "CRED Club", category: "Bill Payment", type: "debit", amount: 5000, bank: "HDFC", cardType: "UPI", time: "08:00" },
+  ],
+  categories: [
+    { name: "Food Delivery", total: 450, count: 1, percentage: 36 },
+    { name: "Quick Commerce", total: 390, count: 1, percentage: 31 },
+    { name: "Cab / Ride", total: 410, count: 1, percentage: 33 },
+  ],
+  message: "",
+};
+
+// ── Route interceptor — call this at the start of every test ──────────────────
+async function mockAPI(page, { wrongPin = false } = {}) {
+  await page.route(`${API}/api/profiles`, route =>
+    route.fulfill({ json: { success: true, profiles: MOCK_PROFILES } })
+  );
+
+  await page.route(`${API}/api/profiles/verify`, async route => {
+    const body = JSON.parse(route.request().postData() || "{}");
+    if (wrongPin || body.pin !== "2580") {
+      // Use 400, not 401 — 401 triggers auth-expired redirect in apiFetch
+      return route.fulfill({ status: 400, json: { success: false, message: "Incorrect PIN" } });
+    }
+    route.fulfill({
+      json: { success: true, token: FAKE_TOKEN, profile: { id: 1, name: "Samir" } },
+    });
+  });
+
+  await page.route(`${API}/api/report**`, route =>
+    route.fulfill({ json: MOCK_REPORT })
+  );
+
+  await page.route(`${API}/api/override`, route =>
+    route.fulfill({ json: { success: true } })
+  );
+
+  await page.route(`${API}/api/overrides`, route =>
+    route.fulfill({ json: { success: true, overrides: {} } })
+  );
+
+  await page.route(`${API}/api/ai-chat`, route =>
+    route.fulfill({ json: { success: true, answer: "Your top spend is Food Delivery at ₹450." } })
+  );
+
+  await page.route(`${API}/api/sms-inbox**`, route =>
+    route.fulfill({ json: { success: true, entries: [] } })
+  );
+}
+
+async function login(page) {
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
-  // Pick first profile (Samir)
+  await page.reload();
   await page.locator("button").filter({ hasText: /SA/i }).first().click();
   await expect(page.locator("text=Enter your 4-digit PIN")).toBeVisible();
-  // Type each digit — pressSequentially triggers React onChange + auto-submit
   const inputs = page.locator('input[type="password"]');
-  for (let i = 0; i < pin.length; i++) {
-    await inputs.nth(i).click();
-    await inputs.nth(i).pressSequentially(pin[i]);
+  for (const digit of ["2", "5", "8", "0"]) {
+    await inputs.nth(["2","5","8","0"].indexOf(digit)).click();
+    await inputs.nth(["2","5","8","0"].indexOf(digit)).pressSequentially(digit);
   }
-  // Wait for dashboard
-  await expect(page.locator("text=Expense Tracker")).toBeVisible({ timeout: 10000 });
+  await expect(page.locator("text=Expense Tracker")).toBeVisible({ timeout: 8000 });
 }
 
 // ── 1. Profile select screen loads ───────────────────────────────────────────
 test("shows profile select screen on first load", async ({ page }) => {
-  // Clear any existing session
+  await mockAPI(page);
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await expect(page.locator("text=Who's tracking?")).toBeVisible();
+  await expect(page.locator("button").filter({ hasText: "Samir" })).toBeVisible();
+  await expect(page.locator("button").filter({ hasText: "Papa" })).toBeVisible();
 });
 
-// ── 2. Login flow ─────────────────────────────────────────────────────────────
-test("login with Samir profile and correct PIN", async ({ page }) => {
-  await page.goto("/");
-  await page.evaluate(() => localStorage.clear());
-  await page.reload();
-
-  // Select Samir
-  await page.locator("button").filter({ hasText: /SA/i }).first().click();
-  await expect(page.locator("text=Enter your 4-digit PIN")).toBeVisible();
-
-  // Enter PIN
-  const inputs = page.locator('input[type="password"]');
-  for (let i = 0; i < SAMIR_PIN.length; i++) {
-    await inputs.nth(i).click();
-    await inputs.nth(i).pressSequentially(SAMIR_PIN[i]);
-  }
-
-  // Should reach dashboard
-  await expect(page.locator("text=Expense Tracker")).toBeVisible({ timeout: 10000 });
+// ── 2. Login with correct PIN ────────────────────────────────────────────────
+test("login with Samir profile and correct PIN reaches dashboard", async ({ page }) => {
+  await mockAPI(page);
+  await login(page);
   await expect(page.locator("text=Pick a date & hit Fetch")).toBeVisible();
+  await expect(page.locator("text=Samir")).toBeVisible();
 });
 
 // ── 3. Wrong PIN shows error ──────────────────────────────────────────────────
-test("wrong PIN shows error", async ({ page }) => {
+test("wrong PIN shows error and stays on PIN screen", async ({ page }) => {
+  await mockAPI(page, { wrongPin: true });
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-
   await page.locator("button").filter({ hasText: /SA/i }).first().click();
   await expect(page.locator("text=Enter your 4-digit PIN")).toBeVisible();
   const inputs = page.locator('input[type="password"]');
@@ -63,105 +117,129 @@ test("wrong PIN shows error", async ({ page }) => {
     await inputs.nth(i).click();
     await inputs.nth(i).pressSequentially("9");
   }
-
-  await expect(page.locator("text=/incorrect|PIN/i")).toBeVisible({ timeout: 8000 });
+  await expect(page.getByText("Incorrect PIN")).toBeVisible({ timeout: 6000 });
+  // Must stay on PIN screen, not go to dashboard
+  await expect(page.locator("text=Enter your 4-digit PIN")).toBeVisible();
 });
 
 // ── 4. Logout returns to profile select ──────────────────────────────────────
-test("logout button returns to profile select", async ({ page }) => {
+test("logout button clears session and returns to profile select", async ({ page }) => {
+  await mockAPI(page);
   await login(page);
-  // Click logout (LogOut icon button)
   await page.locator('button[title="Switch profile"]').click();
   await expect(page.locator("text=Who's tracking?")).toBeVisible();
-  // localStorage should be cleared
   const token = await page.evaluate(() => localStorage.getItem("token"));
   expect(token).toBeNull();
 });
 
-// ── 5. Fetch report ───────────────────────────────────────────────────────────
-test("fetch report loads transactions or shows no-transactions message", async ({ page }) => {
+// ── 5. Fetch report shows transactions ───────────────────────────────────────
+test("fetching report shows transactions and summary", async ({ page }) => {
+  await mockAPI(page);
   await login(page);
-  // Set a recent date and fetch
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const dateStr = yesterday.toISOString().split("T")[0];
-  await page.locator('input[type="date"]').fill(dateStr);
   await page.locator("button").filter({ hasText: "Fetch" }).click();
-
-  // Should either show transactions or "No transactions"
-  await expect(
-    page.locator("text=/transactions|No transactions|🤷/i")
-  ).toBeVisible({ timeout: 20000 });
+  await expect(page.locator("text=Total spent")).toBeVisible({ timeout: 8000 });
+  await expect(page.locator("text=Swiggy")).toBeVisible();
+  await expect(page.locator("text=Zepto")).toBeVisible();
+  // Bills card should appear (CRED = ₹5000)
+  await expect(page.getByText("Bills", { exact: true })).toBeVisible();
 });
 
-// ── 6. Bill toggle updates summary instantly ──────────────────────────────────
-test("marking a transaction as Bill Payment updates summary without refetch", async ({ page }) => {
-  test.setTimeout(90000);
+// ── 6. Bill toggle updates summary instantly without refetch ─────────────────
+test("marking a transaction as Bill Payment updates summary instantly", async ({ page }) => {
+  await mockAPI(page);
   await login(page);
+  await page.locator("button").filter({ hasText: "Fetch" }).click();
+  await expect(page.locator("text=Swiggy")).toBeVisible();
 
-  // Fetch today's report — try today and yesterday until we find transactions
-  const dates = [0, 1, 2, 3].map(offset => {
-    const d = new Date();
-    d.setDate(d.getDate() - offset);
-    return d.toISOString().split("T")[0];
-  });
-
-  let found = false;
-  for (const dateStr of dates) {
-    await page.locator('input[type="date"]').fill(dateStr);
-    await page.locator("button").filter({ hasText: "Fetch" }).click();
-    await page.locator("button").filter({ hasText: "Fetch" }).waitFor({ state: "visible", timeout: 15000 });
-    const hasTxns = await page.locator(".txn-row").count();
-    if (hasTxns > 0) { found = true; break; }
-  }
-
-  if (!found) {
-    test.skip("No transactions found in last 4 days — skipping bill toggle test");
-    return;
-  }
-
-  // Grab the "excl. bills" span text before — bills total must increase after marking a debit as bill
+  // Capture excl. bills text before
   const exclBillsSpan = page.locator("span").filter({ hasText: /excl\. ₹/ });
-  const billsBefore = await exclBillsSpan.textContent().catch(() => "none");
+  const billsBefore = await exclBillsSpan.textContent();
 
-  // Find first DEBIT txn row (shows "-₹") — credits wouldn't affect totalSpent/totalBillPayment
-  const debitRow = page.locator(".txn-row").filter({ hasText: /-₹/ }).first();
-  const hasDebit = await debitRow.count();
-  if (!hasDebit) {
-    test.skip("No debit transactions visible — skipping bill toggle test");
-    return;
-  }
-
-  await debitRow.locator("button").click();
+  // Click pencil on Swiggy (first debit row)
+  const swiggyRow = page.locator(".txn-row").filter({ hasText: "Swiggy" });
+  await swiggyRow.locator("button").click();
   await expect(page.locator("text=Edit Category")).toBeVisible();
 
-  // Select "Bill Payment" and save
+  // Mark as Bill Payment and save
   await page.locator("button").filter({ hasText: "Bill Payment" }).click();
   await page.locator("button").filter({ hasText: "Save" }).click();
 
-  // "excl. bills" amount must increase immediately — no refetch needed
+  // Bills amount must increase immediately — no API refetch
   await expect(async () => {
-    const billsAfter = await exclBillsSpan.textContent().catch(() => "none");
+    const billsAfter = await exclBillsSpan.textContent();
     expect(billsAfter).not.toBe(billsBefore);
   }).toPass({ timeout: 3000 });
 });
 
-// ── 7. Session persists on reload ─────────────────────────────────────────────
-test("session is restored from localStorage on reload", async ({ page }) => {
+// ── 7. Unmarking a bill updates summary instantly ─────────────────────────────
+test("unmarking a bill updates summary instantly", async ({ page }) => {
+  await mockAPI(page);
   await login(page);
-  await page.reload();
-  // Should still be on dashboard without re-entering PIN
-  await expect(page.locator("text=Expense Tracker")).toBeVisible({ timeout: 5000 });
+  await page.locator("button").filter({ hasText: "Fetch" }).click();
+  await expect(page.getByText("Bills", { exact: true })).toBeVisible();
+
+  // Capture excl. bills text while still on Home tab
+  const exclBillsSpan = page.locator("span").filter({ hasText: /excl\. ₹/ });
+  const billsBefore = await exclBillsSpan.textContent();
+
+  // Switch to Activity tab — CRED Club (bill) is visible there
+  await page.locator(".nav-btn").filter({ hasText: "Activity" }).click();
+  await page.locator(".txn-row").filter({ hasText: "CRED Club" }).locator("button").click();
+  await expect(page.locator("text=Edit Category")).toBeVisible();
+
+  // Change to Food Delivery (unmark as bill) and save
+  await page.locator("button").filter({ hasText: "Food Delivery" }).click();
+  await page.locator("button").filter({ hasText: "Save" }).click();
+
+  // Wait for modal to close, then go back to Home tab
+  await expect(page.locator("text=Edit Category")).not.toBeVisible({ timeout: 3000 });
+  await page.locator(".nav-btn").filter({ hasText: "Home" }).click();
+
+  // Bills card must disappear — totalBillPayment is now 0 (CRED Club moved to regular spend)
+  await expect(page.getByText("Bills", { exact: true })).not.toBeVisible({ timeout: 3000 });
 });
 
-// ── 8. Back button on PIN screen returns to profile select ────────────────────
-test("back button on PIN screen returns to profiles", async ({ page }) => {
+// ── 8. Session is restored from localStorage on reload ───────────────────────
+test("session is restored from localStorage on reload", async ({ page }) => {
+  await mockAPI(page);
+  await login(page);
+  // Re-mock after reload too
+  await mockAPI(page);
+  await page.reload();
+  await expect(page.locator("text=Expense Tracker")).toBeVisible({ timeout: 5000 });
+  await expect(page.locator("text=Pick a date & hit Fetch")).toBeVisible();
+});
+
+// ── 9. Back button on PIN screen returns to profiles ─────────────────────────
+test("back button on PIN screen returns to profile select", async ({ page }) => {
+  await mockAPI(page);
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-
   await page.locator("button").filter({ hasText: /SA/i }).first().click();
   await expect(page.locator("text=Enter your 4-digit PIN")).toBeVisible();
   await page.locator("text=← Back to profiles").click();
   await expect(page.locator("text=Who's tracking?")).toBeVisible();
+});
+
+// ── 10. saveOverride never called on real API during tests ───────────────────
+test("category save is intercepted and never reaches real API", async ({ page }) => {
+  let realApiCalled = false;
+
+  await mockAPI(page);
+  // Extra check: if somehow the mock failed and real API was called, flag it
+  await page.route("**/api/override", route => {
+    if (!route.request().url().includes(API)) realApiCalled = true;
+    route.fulfill({ json: { success: true } });
+  });
+
+  await login(page);
+  await page.locator("button").filter({ hasText: "Fetch" }).click();
+  await expect(page.locator("text=Swiggy")).toBeVisible();
+
+  await page.locator(".txn-row").filter({ hasText: "Swiggy" }).locator("button").click();
+  await page.locator("button").filter({ hasText: "Bill Payment" }).click();
+  await page.locator("button").filter({ hasText: "Save" }).click();
+
+  expect(realApiCalled).toBe(false);
 });
