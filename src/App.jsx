@@ -438,6 +438,8 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("profile")); } catch { return null; }
   });
   const [pendingProfile, setPendingProfile] = useState(null);
+  const idleTimerRef = useRef(null);
+  const IDLE_TIMEOUT = 15 * 60 * 1000;
 
   // Listen for 401 auth expiry from api.js
   useEffect(() => {
@@ -448,6 +450,27 @@ export default function App() {
     window.addEventListener("auth-expired", handleExpiry);
     return () => window.removeEventListener("auth-expired", handleExpiry);
   }, []);
+
+  // Auto-logout after 15 min of inactivity
+  useEffect(() => {
+    if (authView !== "dashboard") return;
+    function resetTimer() {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => {
+        localStorage.clear();
+        setCurrentProfile(null);
+        setPendingProfile(null);
+        setAuthView("profiles");
+      }, IDLE_TIMEOUT);
+    }
+    const events = ["mousemove", "mousedown", "keypress", "touchstart", "scroll", "click"];
+    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
+    resetTimer();
+    return () => {
+      clearTimeout(idleTimerRef.current);
+      events.forEach(e => window.removeEventListener(e, resetTimer));
+    };
+  }, [authView]);
 
   function handleProfileSelect(profile) {
     setPendingProfile(profile);
@@ -519,14 +542,21 @@ export default function App() {
   function handleCategorySave(merchant, newCategory) {
     if (data) {
       const updated = { ...data };
-      updated.transactions = updated.transactions.map(t =>
-        t.merchant === merchant ? { ...t, category: newCategory } : t
-      );
-      updated.billPayments = updated.billPayments.map(t =>
-        t.merchant === merchant ? { ...t, category: newCategory } : t
-      );
-      const debits = updated.transactions.filter(t => t.type === "debit" && t.category !== "Bill Payment");
+
+      // Update category on all matching txns across both lists, then re-split
+      const all = [
+        ...updated.transactions.map(t => t.merchant === merchant ? { ...t, category: newCategory } : t),
+        ...updated.billPayments.map(t => t.merchant === merchant ? { ...t, category: newCategory } : t),
+      ];
+      updated.billPayments = all.filter(t => t.category === "Bill Payment");
+      updated.transactions = all.filter(t => t.category !== "Bill Payment");
+
+      // Recalculate summary
+      const debits = updated.transactions.filter(t => t.type === "debit");
       const totalSpent = Math.round(debits.reduce((s, t) => s + t.amount, 0));
+      const totalBillPayment = Math.round(updated.billPayments.filter(t => t.type === "debit").reduce((s, t) => s + t.amount, 0));
+      const totalCredit = Math.round(updated.transactions.filter(t => t.type === "credit").reduce((s, t) => s + t.amount, 0));
+
       const catMap = {};
       debits.forEach(t => {
         if (!catMap[t.category]) catMap[t.category] = { total: 0, count: 0 };
@@ -536,7 +566,8 @@ export default function App() {
       updated.categories = Object.entries(catMap)
         .map(([name, v]) => ({ name, total: Math.round(v.total), count: v.count, percentage: totalSpent > 0 ? Math.round((v.total / totalSpent) * 100) : 0 }))
         .sort((a, b) => b.total - a.total);
-      updated.summary.totalSpent = totalSpent;
+
+      updated.summary = { ...updated.summary, totalSpent, totalBillPayment, totalCredit, debitCount: debits.length };
       setData(updated);
     }
     setEditTxn(null);
