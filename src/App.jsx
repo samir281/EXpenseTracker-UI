@@ -645,13 +645,16 @@ export default function App() {
               <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, var(--gold-dim) 0%, transparent 70%)" }} />
               <div style={{ fontSize: 12, color: "var(--w30)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>Total spent</div>
               <div style={{ fontSize: 38, fontWeight: 300, letterSpacing: -1 }}><span style={{ color: "var(--w30)", fontSize: 24 }}>₹</span>{fmt(summary.totalSpent)}</div>
-              <div style={{ fontSize: 13, color: "var(--w30)", marginTop: 8 }}>{summary.debitCount} txn{summary.debitCount !== 1 ? "s" : ""} · {formatDateLong(date)}</div>
+              <div style={{ fontSize: 13, color: "var(--w30)", marginTop: 8 }}>
+                {summary.debitCount} txn{summary.debitCount !== 1 ? "s" : ""} · {formatDateLong(date)}
+                {summary.totalBillPayment > 0 && <span style={{ color: "var(--blue)", marginLeft: 6 }}>· excl. ₹{fmt(summary.totalBillPayment)} bills</span>}
+              </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: summary.billPaymentCount > 0 ? "1fr 1fr 1fr" : "1fr 1fr", gap: 10, marginBottom: 24 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 24 }}>
               <SummaryCard icon={ArrowUpRight} label="Out" value={summary.totalSpent} colorVar="red" />
               <SummaryCard icon={ArrowDownLeft} label="In" value={summary.totalCredit} colorVar="green" />
-              {summary.billPaymentCount > 0 && <SummaryCard icon={CreditCard} label="Bills" value={summary.totalBillPayment} colorVar="blue" />}
+              <SummaryCard icon={CreditCard} label="Bills" value={summary.totalBillPayment} colorVar="blue" />
             </div>
 
             {categories.length > 0 && (
