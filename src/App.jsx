@@ -651,11 +651,18 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 24 }}>
-              <SummaryCard icon={ArrowUpRight} label="Out" value={summary.totalSpent} colorVar="red" />
-              <SummaryCard icon={ArrowDownLeft} label="In" value={summary.totalCredit} colorVar="green" />
-              <SummaryCard icon={CreditCard} label="Bills" value={summary.totalBillPayment} colorVar="blue" />
-            </div>
+            {(() => {
+              const showIn = summary.totalCredit > 0;
+              const showBills = summary.totalBillPayment > 0;
+              const cols = 1 + (showIn ? 1 : 0) + (showBills ? 1 : 0);
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10, marginBottom: 24 }}>
+                  <SummaryCard icon={ArrowUpRight} label="Out" value={summary.totalSpent} colorVar="red" />
+                  {showIn && <SummaryCard icon={ArrowDownLeft} label="In" value={summary.totalCredit} colorVar="green" />}
+                  {showBills && <SummaryCard icon={CreditCard} label="Bills" value={summary.totalBillPayment} colorVar="blue" />}
+                </div>
+              );
+            })()}
 
             {categories.length > 0 && (
               <div style={{ marginBottom: 24 }}>
