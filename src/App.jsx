@@ -3,9 +3,9 @@ import {
   Wallet, Search, ChevronLeft, ChevronRight, RefreshCw,
   ArrowUpRight, ArrowDownLeft, CreditCard, Sparkles,
   ArrowLeftRight, Send, Loader2, AlertCircle, Pencil, Check, X, Plus,
-  LogOut, User, MessageSquare, Trash2,
+  LogOut, User, MessageSquare, Trash2, BarChart2,
 } from "lucide-react";
-import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin, submitSMS, fetchSMSInbox, deleteSMSEntry } from "./api";
+import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin, submitSMS, fetchSMSInbox, deleteSMSEntry, fetchInsights } from "./api";
 import { getCategoryConfig, CATEGORY_NAMES, fmt, formatDateLong } from "./constants";
 
 // ─── Auth Screens ─────────────────────────────────────────────────────────────
@@ -426,6 +426,147 @@ function SmsTab({ date }) {
   );
 }
 
+// ─── Insights View ───────────────────────────────────────────────────────────
+function InsightsView() {
+  const pad = n => String(n).padStart(2, "0");
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  const monthAgo = new Date(today); monthAgo.setDate(today.getDate() - 30);
+  const monthAgoStr = `${monthAgo.getFullYear()}-${pad(monthAgo.getMonth() + 1)}-${pad(monthAgo.getDate())}`;
+
+  const [from, setFrom] = useState(monthAgoStr);
+  const [to, setTo] = useState(todayStr);
+  const [query, setQuery] = useState("");
+  const [mode, setMode] = useState("merchant");
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [showMissing, setShowMissing] = useState(false);
+
+  async function handleSearch() {
+    setLoading(true); setError(null); setResult(null);
+    try {
+      const params = { from, to };
+      if (query.trim()) {
+        if (mode === "merchant") params.merchant = query.trim();
+        else params.category = query.trim();
+      }
+      setResult(await fetchInsights(params));
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  }
+
+  return (
+    <div style={{ padding: "0 20px" }} className="fade-in">
+      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 14 }}>Spending Insights</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--w30)", marginBottom: 4 }}>From</div>
+            <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ width: "100%" }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "var(--w30)", marginBottom: 4 }}>To</div>
+            <input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ width: "100%" }} />
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+          {["merchant", "category"].map(m => (
+            <button key={m} onClick={() => setMode(m)} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, border: `1px solid ${mode === m ? "var(--gold)" : "var(--w10)"}`, background: mode === m ? "var(--gold-dim)" : "transparent", color: mode === m ? "var(--gold)" : "var(--w50)", cursor: "pointer", fontFamily: "inherit", textTransform: "capitalize" }}>
+              {m}
+            </button>
+          ))}
+        </div>
+        <div style={{ position: "relative", marginBottom: 10 }}>
+          <Search size={15} style={{ position: "absolute", left: 14, top: 12, color: "var(--w30)" }} />
+          <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSearch()} placeholder={mode === "merchant" ? "e.g. Swiggy, Zomato, Blinkit..." : "e.g. Food Delivery, Bill Payment..."} style={{ width: "100%", paddingLeft: 36 }} />
+        </div>
+        {mode === "merchant" && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+            {["Swiggy", "Zomato", "Blinkit", "CRED", "Amazon", "Zepto"].map(m => (
+              <button key={m} className="chip" onClick={() => setQuery(m)}>{m}</button>
+            ))}
+          </div>
+        )}
+        <button onClick={handleSearch} disabled={loading} style={{ width: "100%", padding: 12, background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 12, cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: loading ? 0.5 : 1 }}>
+          {loading ? <Loader2 size={16} className="spin" /> : <BarChart2 size={16} />}
+          {loading ? "Searching..." : "Search"}
+        </button>
+      </div>
+
+      {error && <div style={{ padding: "12px 16px", background: "var(--red-bg)", borderRadius: 12, color: "var(--red)", fontSize: 13, marginBottom: 16 }}>{error}</div>}
+
+      {result && (
+        <div className="fade-in">
+          <div className="card glow" style={{ padding: 24, marginBottom: 14, position: "relative", overflow: "hidden" }}>
+            <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, var(--gold-dim) 0%, transparent 70%)" }} />
+            <div style={{ fontSize: 12, color: "var(--w30)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>
+              Total spent{query ? ` on "${query}"` : ""}
+            </div>
+            <div style={{ fontSize: 38, fontWeight: 300, letterSpacing: -1 }}><span style={{ color: "var(--w30)", fontSize: 24 }}>₹</span>{fmt(result.total)}</div>
+            <div style={{ fontSize: 13, color: "var(--w30)", marginTop: 8 }}>{result.count} transaction{result.count !== 1 ? "s" : ""} · {result.from} → {result.to}</div>
+            <div style={{ fontSize: 12, color: "var(--w30)", marginTop: 4 }}>{result.cachedDates.length} days cached{result.missingDates.length > 0 ? `, ${result.missingDates.length} missing` : ""}</div>
+          </div>
+
+          {result.missingDates.length > 0 && (
+            <div style={{ padding: "12px 16px", background: "var(--gold-dim)", border: "1px solid var(--gold)33", borderRadius: 12, marginBottom: 14, fontSize: 12 }}>
+              <div style={{ color: "var(--gold)", fontWeight: 500, marginBottom: 2 }}>⚠ {result.missingDates.length} day{result.missingDates.length !== 1 ? "s" : ""} not cached yet</div>
+              <div style={{ color: "var(--w30)", marginBottom: 6 }}>Open those dates in the dashboard to fetch and cache them.</div>
+              <button onClick={() => setShowMissing(v => !v)} style={{ fontSize: 11, color: "var(--gold)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>
+                {showMissing ? "Hide ▲" : "Show dates ▼"}
+              </button>
+              {showMissing && <div style={{ marginTop: 6, color: "var(--w30)", lineHeight: 1.8, fontSize: 11 }}>{result.missingDates.join(" · ")}</div>}
+            </div>
+          )}
+
+          {result.merchantBreakdown.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 10 }}>By merchant</div>
+              <div className="card" style={{ padding: "6px 20px" }}>
+                {result.merchantBreakdown.map((m, i) => (
+                  <div key={i} style={{ padding: "12px 0", borderBottom: i < result.merchantBreakdown.length - 1 ? "1px solid var(--border)" : "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 500 }}>{m.merchant}</div>
+                      <div style={{ fontSize: 11, color: "var(--w30)", marginTop: 2 }}>{m.count} txn{m.count !== 1 ? "s" : ""}</div>
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: "var(--red)" }}>₹{fmt(m.total)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!result.filter.merchant && result.categoryBreakdown.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 10 }}>By category</div>
+              <div className="card" style={{ padding: "6px 20px" }}>
+                {result.categoryBreakdown.map((c, i) => {
+                  const { color } = getCategoryConfig(c.category);
+                  return (
+                    <div key={i} style={{ padding: "12px 0", borderBottom: i < result.categoryBreakdown.length - 1 ? "1px solid var(--border)" : "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 500, color }}>{c.category}</div>
+                        <div style={{ fontSize: 11, color: "var(--w30)", marginTop: 2 }}>{c.count} txn{c.count !== 1 ? "s" : ""}</div>
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 500 }}>₹{fmt(c.total)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {result.count === 0 && (
+            <div className="card" style={{ padding: "40px 20px", textAlign: "center", color: "var(--w30)", fontSize: 13 }}>
+              No transactions found. Fetch more dates in the dashboard first.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main App ────────────────────────────────────────────────────────────────
 export default function App() {
   // Auth state
@@ -743,8 +884,13 @@ export default function App() {
         <SmsTab date={date} />
       )}
 
+      {/* INSIGHTS */}
+      {tab === "insights" && (
+        <InsightsView />
+      )}
+
       {/* AI CHAT */}
-      {data && !loading && tab === "insights" && (
+      {data && !loading && tab === "ai" && (
         <div style={{ padding: "0 20px" }} className="fade-in">
           <div className="card" style={{ padding: 20, minHeight: 420, display: "flex", flexDirection: "column" }}>
             <div style={{ flex: 1, overflowY: "auto", marginBottom: 14 }}>
@@ -769,7 +915,7 @@ export default function App() {
 
       {/* Nav */}
       <div className="nav">
-        {[{ id: "home", label: "Home", icon: Wallet }, { id: "transactions", label: "Activity", icon: ArrowLeftRight }, { id: "sms", label: "SMS", icon: MessageSquare }, { id: "insights", label: "AI", icon: Sparkles }].map(t => {
+        {[{ id: "home", label: "Home", icon: Wallet }, { id: "transactions", label: "Activity", icon: ArrowLeftRight }, { id: "insights", label: "Insights", icon: BarChart2 }, { id: "sms", label: "SMS", icon: MessageSquare }, { id: "ai", label: "AI", icon: Sparkles }].map(t => {
           const Icon = t.icon; const active = tab === t.id;
           return <button key={t.id} className={`nav-btn ${active ? "active" : ""}`} onClick={() => setTab(t.id)}><Icon size={22} /><span style={{ fontWeight: active ? 500 : 400 }}>{t.label}</span>{active && <div style={{ width: 4, height: 4, borderRadius: 2, background: "var(--gold)", marginTop: 2 }} />}</button>;
         })}

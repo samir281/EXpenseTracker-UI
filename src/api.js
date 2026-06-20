@@ -116,3 +116,14 @@ export async function deleteSMSEntry(id) {
   if (!result) throw new Error("Login required");
   return result.data;
 }
+
+export async function fetchInsights({ from, to, merchant, category }) {
+  const params = new URLSearchParams({ from, to });
+  if (merchant) params.set("merchant", merchant);
+  if (category) params.set("category", category);
+  const result = await apiFetch(`/api/insights?${params}`);
+  if (!result) throw new Error("Login required");
+  const { res, data } = result;
+  if (!res.ok || !data.success) throw new Error(data.message || "Insights failed");
+  return data;
+}
