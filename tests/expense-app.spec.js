@@ -69,6 +69,19 @@ async function mockAPI(page, { wrongPin = false } = {}) {
   await page.route(`${API}/api/sms-inbox**`, route =>
     route.fulfill({ json: { success: true, entries: [] } })
   );
+
+  await page.route(`${API}/api/insights**`, route =>
+    route.fulfill({ json: {
+      success: true, from: "2026-05-21", to: "2026-06-20",
+      filter: { merchant: "Swiggy", category: null },
+      total: 2340, count: 5,
+      merchantBreakdown: [{ merchant: "Swiggy", total: 2340, count: 5 }],
+      categoryBreakdown: [],
+      dateBreakdown: [],
+      cachedDates: ["2026-06-18"],
+      missingDates: ["2026-06-19", "2026-06-20"],
+    }})
+  );
 }
 
 async function login(page) {
@@ -242,4 +255,49 @@ test("category save is intercepted and never reaches real API", async ({ page })
   await page.locator("button").filter({ hasText: "Save" }).click();
 
   expect(realApiCalled).toBe(false);
+});
+
+// ── 11. Refresh button triggers re-fetch (bypasses cache) ────────────────────
+test("refresh button triggers a new report fetch", async ({ page }) => {
+  let fetchCount = 0;
+  await mockAPI(page);
+  await page.route(`${API}/api/report**`, route => {
+    fetchCount++;
+    route.fulfill({ json: MOCK_REPORT });
+  });
+
+  await login(page);
+  // First fetch via Fetch button
+  await page.locator("button").filter({ hasText: "Fetch" }).click();
+  await expect(page.locator("text=Total spent")).toBeVisible({ timeout: 8000 });
+  expect(fetchCount).toBe(1);
+
+  // Refresh button (icon-only, identified by title)
+  await page.locator('button[title*="Refresh"]').click();
+  await expect(page.locator("text=Total spent")).toBeVisible({ timeout: 8000 });
+  expect(fetchCount).toBe(2);
+});
+
+// ── 12. Insights tab loads and search works ───────────────────────────────────
+test("insights tab shows search form and returns results", async ({ page }) => {
+  await mockAPI(page);
+  await login(page);
+
+  // Navigate to Insights tab
+  await page.locator(".nav-btn").filter({ hasText: "Insights" }).click();
+  await expect(page.locator("text=Spending Insights")).toBeVisible();
+
+  // Quick chip click fills the search box
+  await page.locator("button.chip").filter({ hasText: "Swiggy" }).click();
+  const input = page.locator('input[placeholder*="Swiggy"]');
+  await expect(input).toHaveValue("Swiggy");
+
+  // Submit search
+  await page.locator("button").filter({ hasText: "Search" }).click();
+
+  // Should show total card and merchant breakdown
+  await expect(page.locator("text=Total spent")).toBeVisible({ timeout: 6000 });
+  await expect(page.locator("text=₹2,340").first()).toBeVisible();
+  await expect(page.locator("text=By merchant")).toBeVisible();
+  await expect(page.locator("text=missing")).toBeVisible();
 });
