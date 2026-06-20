@@ -58,8 +58,9 @@ export async function verifyPin(profileId, pin) {
   return data;
 }
 
-export async function fetchReport(date) {
-  const result = await apiFetch(`/api/report?date=${date}`);
+export async function fetchReport(date, refresh = false) {
+  const url = `/api/report?date=${date}${refresh ? "&refresh=true" : ""}`;
+  const result = await apiFetch(url);
   if (!result) throw new Error("Login required");
   const { res, data } = result;
   if (!res.ok || !data.success) throw new Error(data.message || `Server error (${res.status})`);

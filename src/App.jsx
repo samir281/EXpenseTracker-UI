@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  Wallet, Search, ChevronLeft, ChevronRight, RefreshCw,
+  Wallet, Search, ChevronLeft, ChevronRight, RefreshCw, RotateCw,
   ArrowUpRight, ArrowDownLeft, CreditCard, Sparkles,
   ArrowLeftRight, Send, Loader2, AlertCircle, Pencil, Check, X, Plus,
   LogOut, User, MessageSquare, Trash2, BarChart2,
@@ -648,10 +648,10 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [editTxn, setEditTxn] = useState(null);
 
-  async function handleFetch() {
+  async function handleFetch(refresh = false) {
     setLoading(true); setError(null); setData(null);
     try {
-      const result = await fetchReport(date);
+      const result = await fetchReport(date, refresh);
       setData(result);
       setMsgs([{ role: "assistant", content: `Report loaded for ${formatDateLong(date)}! ${result.transactions.length} transactions, ₹${fmt(result.summary.totalSpent)} spent. Ask me anything.` }]);
     } catch (e) { setError(e.message); }
@@ -777,8 +777,16 @@ export default function App() {
           <button onClick={() => shiftDate(-1)} style={{ width: 36, height: 36, borderRadius: 10, background: "var(--card)", border: "1px solid var(--border)", color: "var(--w50)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><ChevronLeft size={18} /></button>
           <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ flex: 1, textAlign: "center", fontSize: 14, fontWeight: 500 }} />
           <button onClick={() => shiftDate(1)} style={{ width: 36, height: 36, borderRadius: 10, background: "var(--card)", border: "1px solid var(--border)", color: "var(--w50)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><ChevronRight size={18} /></button>
-          <button onClick={handleFetch} disabled={loading} style={{ padding: "8px 20px", background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6, opacity: loading ? 0.5 : 1 }}>
+          <button onClick={() => handleFetch(false)} disabled={loading} style={{ padding: "8px 20px", background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6, opacity: loading ? 0.5 : 1 }}>
             {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />} {loading ? "Loading" : "Fetch"}
+          </button>
+          <button
+            onClick={() => handleFetch(true)}
+            disabled={loading}
+            title="Refresh — re-fetch from Gmail and sync new transactions"
+            style={{ width: 36, height: 36, borderRadius: 10, background: "var(--card)", border: "1px solid var(--border)", color: data ? "var(--gold)" : "var(--w30)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1, flexShrink: 0 }}
+          >
+            <RotateCw size={15} />
           </button>
         </div>
       </div>
