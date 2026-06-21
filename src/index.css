@@ -132,7 +132,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 /* Floating pill nav */
 .nav {
   position: fixed;
-  bottom: 20px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   background: rgba(18, 18, 18, 0.88);

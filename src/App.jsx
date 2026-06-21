@@ -1048,7 +1048,7 @@ export default function App() {
       {editTxn && <CategoryModal txn={editTxn} onSave={handleCategorySave} onClose={() => setEditTxn(null)} />}
 
       {/* Sticky header */}
-      <div className="sticky-header" style={{ padding: "20px 20px 14px" }}>
+      <div className="sticky-header" style={{ padding: "max(20px, env(safe-area-inset-top)) 20px 14px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 40, height: 40, borderRadius: 12, background: "var(--gold-dim)", display: "flex", alignItems: "center", justifyContent: "center" }}>

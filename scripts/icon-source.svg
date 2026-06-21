@@ -1,0 +1,24 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E8D48B"/>
+      <stop offset="50%" stop-color="#C8A951"/>
+      <stop offset="100%" stop-color="#9C7C2E"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Full-bleed gold background (iOS/Android apply their own corner mask) -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- Wallet, dark, centered within the maskable safe zone (~center 60%) -->
+  <g transform="translate(256 256)">
+    <!-- wallet body -->
+    <rect x="-118" y="-86" width="236" height="172" rx="34" fill="#0E0E0E"/>
+    <!-- top edge highlight -->
+    <rect x="-118" y="-86" width="236" height="30" rx="34" fill="#1A1A1A"/>
+    <!-- card slot / clasp panel -->
+    <rect x="34" y="-18" width="100" height="58" rx="16" fill="#161616"/>
+    <!-- gold clasp dot -->
+    <circle cx="74" cy="11" r="15" fill="#C8A951"/>
+  </g>
+</svg>
