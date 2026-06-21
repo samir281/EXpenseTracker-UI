@@ -35,42 +35,45 @@ const MOCK_REPORT = {
 
 // ── Route interceptor — call this at the start of every test ──────────────────
 async function mockAPI(page, { wrongPin = false } = {}) {
-  await page.route(`${API}/api/profiles`, route =>
+  // Host-agnostic globs (**/api/...) so mocks intercept whichever backend the
+  // frontend targets — Railway in prod builds, or localhost:3001 in dev via
+  // .env.local. Tests stay fully mocked and never touch a real database.
+  await page.route(`**/api/profiles`, route =>
     route.fulfill({ json: { success: true, profiles: MOCK_PROFILES } })
   );
 
-  await page.route(`${API}/api/profiles/verify`, async route => {
+  await page.route(`**/api/profiles/verify`, async route => {
     const body = JSON.parse(route.request().postData() || "{}");
     if (wrongPin || body.pin !== "2580") {
       // Use 400, not 401 — 401 triggers auth-expired redirect in apiFetch
       return route.fulfill({ status: 400, json: { success: false, message: "Incorrect PIN" } });
     }
     route.fulfill({
-      json: { success: true, token: FAKE_TOKEN, profile: { id: 1, name: "Samir" } },
+      json: { success: true, token: FAKE_TOKEN, profile: { id: 1, name: "Samir", hasGmail: true } },
     });
   });
 
-  await page.route(`${API}/api/report**`, route =>
+  await page.route(`**/api/report**`, route =>
     route.fulfill({ json: MOCK_REPORT })
   );
 
-  await page.route(`${API}/api/override`, route =>
+  await page.route(`**/api/override`, route =>
     route.fulfill({ json: { success: true } })
   );
 
-  await page.route(`${API}/api/overrides`, route =>
+  await page.route(`**/api/overrides`, route =>
     route.fulfill({ json: { success: true, overrides: {} } })
   );
 
-  await page.route(`${API}/api/ai-chat`, route =>
+  await page.route(`**/api/ai-chat`, route =>
     route.fulfill({ json: { success: true, answer: "Your top spend is Food Delivery at ₹450." } })
   );
 
-  await page.route(`${API}/api/sms-inbox**`, route =>
+  await page.route(`**/api/sms-inbox**`, route =>
     route.fulfill({ json: { success: true, entries: [] } })
   );
 
-  await page.route(`${API}/api/insights**`, route =>
+  await page.route(`**/api/insights**`, route =>
     route.fulfill({ json: {
       success: true, from: "2026-05-21", to: "2026-06-20",
       filter: { merchant: "Swiggy", category: null },
@@ -236,13 +239,14 @@ test("back button on PIN screen returns to profile select", async ({ page }) => 
 });
 
 // ── 10. saveOverride never called on real API during tests ───────────────────
-test("category save is intercepted and never reaches real API", async ({ page }) => {
-  let realApiCalled = false;
+test("category save is intercepted by the mock and never reaches a real backend", async ({ page }) => {
+  let overrideIntercepted = false;
 
   await mockAPI(page);
-  // Extra check: if somehow the mock failed and real API was called, flag it
+  // The override POST must be caught by this mock — proving it never escapes to
+  // a real server/DB. (This guard was added after the prod-DB write incident.)
   await page.route("**/api/override", route => {
-    if (!route.request().url().includes(API)) realApiCalled = true;
+    overrideIntercepted = true;
     route.fulfill({ json: { success: true } });
   });
 
@@ -254,14 +258,14 @@ test("category save is intercepted and never reaches real API", async ({ page })
   await page.locator("button").filter({ hasText: "Bill Payment" }).click();
   await page.locator("button").filter({ hasText: "Save" }).click();
 
-  expect(realApiCalled).toBe(false);
+  await expect.poll(() => overrideIntercepted, { timeout: 3000 }).toBe(true);
 });
 
 // ── 11. Refresh button triggers re-fetch (bypasses cache) ────────────────────
 test("refresh button triggers a new report fetch", async ({ page }) => {
   let fetchCount = 0;
   await mockAPI(page);
-  await page.route(`${API}/api/report**`, route => {
+  await page.route(`**/api/report**`, route => {
     fetchCount++;
     route.fulfill({ json: MOCK_REPORT });
   });

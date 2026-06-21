@@ -129,38 +129,48 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
-/* Bottom nav */
+/* Floating pill nav */
 .nav {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: var(--card);
-  border-top: 1px solid var(--border);
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(18, 18, 18, 0.88);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 40px;
   display: flex;
-  padding: 6px 0 12px;
-  z-index: 10;
-  max-width: 480px;
-  margin: 0 auto;
+  padding: 6px;
+  z-index: 50;
+  gap: 2px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 .nav-btn {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 8px 0;
-  background: none;
+  gap: 3px;
+  padding: 9px 16px;
+  background: transparent;
   border: none;
+  border-radius: 34px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   font-family: inherit;
-  color: var(--w30);
-  transition: color 0.2s;
+  color: rgba(255, 255, 255, 0.3);
+  transition: color 0.2s, background 0.2s;
+  text-decoration: none;
+  min-width: 58px;
+}
+
+.nav-btn:hover {
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .nav-btn.active {
+  background: rgba(200, 169, 81, 0.14);
   color: var(--gold);
 }
 
@@ -215,3 +225,112 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .spin {
   animation: spin 1s linear infinite;
 }
+
+/* Page slide transition */
+@keyframes pageSlideIn {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.page-slide {
+  animation: pageSlideIn 0.18s ease-out;
+}
+
+/* Sticky header */
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(10, 10, 10, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* ── Cartoon loading animation ────────────────────────────────────── */
+@keyframes cartLidBounce {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  35%, 65% { transform: rotate(-14deg) translateY(-7px); }
+}
+
+@keyframes cartReceipt1 {
+  0%, 10%  { transform: translateY(0) rotate(0deg); opacity: 0; }
+  22%      { opacity: 1; }
+  75%, 100% { transform: translateY(-78px) rotate(-10deg); opacity: 0; }
+}
+
+@keyframes cartReceipt2 {
+  0%, 28%  { transform: translateY(0) rotate(0deg) translateX(0); opacity: 0; }
+  40%      { opacity: 1; }
+  82%, 100% { transform: translateY(-68px) rotate(14deg) translateX(22px); opacity: 0; }
+}
+
+@keyframes cartReceipt3 {
+  0%, 46%  { transform: translateY(0) rotate(0deg) translateX(0); opacity: 0; }
+  58%      { opacity: 1; }
+  90%, 100% { transform: translateY(-60px) rotate(-12deg) translateX(-18px); opacity: 0; }
+}
+
+@keyframes cartArm {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(4px) rotate(-12deg); }
+}
+
+@keyframes cartAntenna {
+  0%, 42%, 100% { opacity: 1; }
+  46%, 54%      { opacity: 0.15; }
+}
+
+@keyframes cartEyes {
+  0%, 44%, 52%, 100% { transform: scaleY(1); }
+  48%                { transform: scaleY(0.08); }
+}
+
+@keyframes cartLoadingDot {
+  0%, 60%, 100% { opacity: 0.2; transform: translateY(0); }
+  30%           { opacity: 1; transform: translateY(-4px); }
+}
+
+.cart-lid {
+  animation: cartLidBounce 2.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 8% center;
+}
+
+.cart-receipt-1 {
+  animation: cartReceipt1 2.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center 90%;
+}
+
+.cart-receipt-2 {
+  animation: cartReceipt2 2.6s ease-in-out 0.35s infinite;
+  transform-box: fill-box;
+  transform-origin: center 90%;
+}
+
+.cart-receipt-3 {
+  animation: cartReceipt3 2.6s ease-in-out 0.7s infinite;
+  transform-box: fill-box;
+  transform-origin: center 90%;
+}
+
+.cart-arm {
+  animation: cartArm 1.1s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 5% center;
+}
+
+.cart-antenna {
+  animation: cartAntenna 2.2s ease-in-out infinite;
+}
+
+.cart-eyes {
+  animation: cartEyes 3.5s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center center;
+}
+
+.cart-dot-1 { animation: cartLoadingDot 1.4s ease-in-out 0s infinite; }
+.cart-dot-2 { animation: cartLoadingDot 1.4s ease-in-out 0.2s infinite; }
+.cart-dot-3 { animation: cartLoadingDot 1.4s ease-in-out 0.4s infinite; }

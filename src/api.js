@@ -1,4 +1,4 @@
-const API_BASE = "https://expense-api-production-bf8c.up.railway.app";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "https://expense-api-production-bf8c.up.railway.app";
 
 async function apiFetch(path, options = {}) {
   const token = localStorage.getItem("token");

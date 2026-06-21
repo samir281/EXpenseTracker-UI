@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
+import { Routes, Route, Link, useLocation } from "react-router-dom";
 import {
   Wallet, Search, ChevronLeft, ChevronRight, RefreshCw, RotateCw,
   ArrowUpRight, ArrowDownLeft, CreditCard, Sparkles,
   ArrowLeftRight, Send, Loader2, AlertCircle, Pencil, Check, X, Plus,
-  LogOut, User, MessageSquare, Trash2, BarChart2,
+  LogOut, MessageSquare, Trash2, BarChart2,
 } from "lucide-react";
 import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin, submitSMS, fetchSMSInbox, deleteSMSEntry, fetchInsights } from "./api";
 import { getCategoryConfig, CATEGORY_NAMES, fmt, formatDateLong } from "./constants";
@@ -158,7 +159,7 @@ function PinEntry({ profile, onSuccess, onBack }) {
   );
 }
 
-// ─── Dashboard Components ─────────────────────────────────────────────────────
+// ─── Shared UI Components ─────────────────────────────────────────────────────
 
 function SummaryCard({ icon: Icon, label, value, colorVar }) {
   return (
@@ -301,8 +302,157 @@ function CategoryModal({ txn, onSave, onClose }) {
   );
 }
 
-// ─── SMS Tab ─────────────────────────────────────────────────────────────────
-function SmsTab({ date }) {
+// ─── Home Page ────────────────────────────────────────────────────────────────
+
+function HomePage({ data, date, setEditTxn }) {
+  const summary = data?.summary || {};
+  const txns = data?.transactions || [];
+  const bills = data?.billPayments || [];
+  const categories = data?.categories || [];
+  const maxCat = categories[0]?.total || 1;
+
+  if (txns.length === 0 && bills.length === 0) {
+    return (
+      <div style={{ padding: "0 20px" }} className="fade-in">
+        <div className="card" style={{ padding: "40px 20px", textAlign: "center" }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🤷</div>
+          <div style={{ fontSize: 14, color: "var(--w50)" }}>{data.message || "No transactions"}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "0 20px" }} className="fade-in">
+      {/* Hero total */}
+      <div className="card glow" style={{ padding: 24, marginBottom: 14, position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, var(--gold-dim) 0%, transparent 70%)" }} />
+        <div style={{ fontSize: 12, color: "var(--w30)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>Total spent</div>
+        <div style={{ fontSize: 38, fontWeight: 300, letterSpacing: -1 }}><span style={{ color: "var(--w30)", fontSize: 24 }}>₹</span>{fmt(summary.totalSpent)}</div>
+        <div style={{ fontSize: 13, color: "var(--w30)", marginTop: 8 }}>
+          {summary.debitCount} txn{summary.debitCount !== 1 ? "s" : ""} · {formatDateLong(date)}
+          {summary.totalBillPayment > 0 && <span style={{ color: "var(--blue)", marginLeft: 6 }}>· excl. ₹{fmt(summary.totalBillPayment)} bills</span>}
+        </div>
+      </div>
+
+      {/* Summary mini-cards */}
+      {(() => {
+        const showIn = summary.totalCredit > 0;
+        const showBills = summary.totalBillPayment > 0;
+        const cols = 1 + (showIn ? 1 : 0) + (showBills ? 1 : 0);
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10, marginBottom: 24 }}>
+            <SummaryCard icon={ArrowUpRight} label="Out" value={summary.totalSpent} colorVar="red" />
+            {showIn && <SummaryCard icon={ArrowDownLeft} label="In" value={summary.totalCredit} colorVar="green" />}
+            {showBills && <SummaryCard icon={CreditCard} label="Bills" value={summary.totalBillPayment} colorVar="blue" />}
+          </div>
+        );
+      })()}
+
+      {/* Category breakdown */}
+      {categories.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 16 }}>Where it went</div>
+          <div className="card" style={{ padding: "6px 20px" }}>
+            {categories.map(cat => <CategoryRow key={cat.name} cat={cat} maxTotal={maxCat} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Recent transactions → link to /transactions page */}
+      {txns.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 500 }}>Transactions</div>
+            <Link to="/transactions" style={{ fontSize: 12, color: "var(--gold)", textDecoration: "none", display: "flex", alignItems: "center", gap: 4 }}>
+              See all <ChevronRight size={14} />
+            </Link>
+          </div>
+          <div className="card">
+            {txns.slice(0, 5).map((t, i) => <TransactionRow key={i} txn={t} onEditCategory={setEditTxn} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Insights quick-link */}
+      <Link
+        to="/insights"
+        style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 20px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 16, textDecoration: "none", marginBottom: 8 }}
+      >
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: "var(--gold-dim)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <BarChart2 size={18} style={{ color: "var(--gold)" }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 500, color: "var(--w)" }}>Spending Insights</div>
+          <div style={{ fontSize: 12, color: "var(--w30)", marginTop: 2 }}>Analyse across date ranges</div>
+        </div>
+        <ChevronRight size={16} style={{ color: "var(--w30)" }} />
+      </Link>
+    </div>
+  );
+}
+
+// ─── Transactions Page ────────────────────────────────────────────────────────
+
+function TransactionsPage({ data, setEditTxn }) {
+  const [search, setSearch] = useState("");
+  const [fType, setFType] = useState("all");
+  const [fBank, setFBank] = useState("all");
+
+  if (!data) {
+    return (
+      <div style={{ padding: "60px 20px", textAlign: "center" }} className="fade-in">
+        <div style={{ fontSize: 40, marginBottom: 16 }}>📋</div>
+        <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>No data yet</div>
+        <div style={{ fontSize: 13, color: "var(--w30)", marginBottom: 20 }}>Pick a date and fetch from home</div>
+        <Link to="/" style={{ fontSize: 13, color: "var(--gold)", textDecoration: "none" }}>← Go to Home</Link>
+      </div>
+    );
+  }
+
+  const allTxns = [...(data.transactions || []), ...(data.billPayments || [])];
+  const bankList = [...new Set(allTxns.map(t => t.bank))];
+  const filtered = allTxns.filter(t => {
+    if (search && !t.merchant.toLowerCase().includes(search.toLowerCase())) return false;
+    if (fType === "debit" && t.type !== "debit") return false;
+    if (fType === "credit" && t.type !== "credit") return false;
+    if (fType === "bill" && t.category !== "Bill Payment") return false;
+    if (fBank !== "all" && t.bank !== fBank) return false;
+    return true;
+  });
+
+  return (
+    <div style={{ padding: "0 20px" }} className="fade-in">
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <div style={{ flex: 1, position: "relative" }}>
+          <Search size={15} style={{ position: "absolute", left: 14, top: 12, color: "var(--w30)" }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." style={{ width: "100%", paddingLeft: 36 }} />
+        </div>
+        <select value={fType} onChange={e => setFType(e.target.value)} style={{ width: 90, paddingRight: 8 }}>
+          <option value="all">All</option><option value="debit">Spent</option>
+          <option value="credit">Received</option><option value="bill">Bills</option>
+        </select>
+        <select value={fBank} onChange={e => setFBank(e.target.value)} style={{ width: 90, paddingRight: 8 }}>
+          <option value="all">All banks</option>
+          {bankList.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
+      </div>
+      <div style={{ fontSize: 12, color: "var(--w30)", marginBottom: 14 }}>
+        {filtered.length} transaction{filtered.length !== 1 ? "s" : ""}
+      </div>
+      <div className="card">
+        {filtered.length === 0
+          ? <div style={{ padding: 40, textAlign: "center", color: "var(--w30)", fontSize: 13 }}>No matching transactions</div>
+          : filtered.map((t, i) => <TransactionRow key={i} txn={t} onEditCategory={setEditTxn} />)
+        }
+      </div>
+    </div>
+  );
+}
+
+// ─── SMS Page ─────────────────────────────────────────────────────────────────
+
+function SmsPage({ date }) {
   const [text, setText] = useState("");
   const [smsDate, setSmsDate] = useState(date);
   const [entries, setEntries] = useState([]);
@@ -426,8 +576,9 @@ function SmsTab({ date }) {
   );
 }
 
-// ─── Insights View ───────────────────────────────────────────────────────────
-function InsightsView() {
+// ─── Insights Page ────────────────────────────────────────────────────────────
+
+function InsightsPage() {
   const pad = n => String(n).padStart(2, "0");
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
@@ -567,9 +718,174 @@ function InsightsView() {
   );
 }
 
-// ─── Main App ────────────────────────────────────────────────────────────────
+// ─── AI Page ──────────────────────────────────────────────────────────────────
+
+function AiPage({ data, msgs, setMsgs, inp, setInp, busy, handleAsk }) {
+  return (
+    <div style={{ padding: "0 20px" }} className="fade-in">
+      <div className="card" style={{ padding: 20, minHeight: 420, display: "flex", flexDirection: "column" }}>
+        <div style={{ flex: 1, overflowY: "auto", marginBottom: 14 }}>
+          {msgs.map((m, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 14 }}>
+              {m.role === "assistant" && <div style={{ width: 32, height: 32, borderRadius: 10, background: "var(--gold-dim)", display: "flex", alignItems: "center", justifyContent: "center", marginRight: 10, flexShrink: 0, marginTop: 2 }}><Sparkles size={16} style={{ color: "var(--gold)" }} /></div>}
+              <div className="bubble" style={{ background: m.role === "user" ? "var(--gold)" : "var(--w10)", color: m.role === "user" ? "#0A0A0A" : "var(--w80)", borderBottomRightRadius: m.role === "user" ? 4 : 18, borderBottomLeftRadius: m.role === "assistant" ? 4 : 18, fontWeight: m.role === "user" ? 500 : 400 }}>{m.content}</div>
+            </div>
+          ))}
+          {busy && <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}><div style={{ width: 32, height: 32, borderRadius: 10, background: "var(--gold-dim)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Sparkles size={16} style={{ color: "var(--gold)" }} /></div><div className="bubble" style={{ background: "var(--w10)", color: "var(--w30)", display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}><Loader2 size={14} className="spin" /> Thinking...</div></div>}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+          {["Food spend?", "Biggest expense?", "Which card most?", "Am I overspending?"].map(q => <button className="chip" key={q} onClick={() => setInp(q)}>{q}</button>)}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input value={inp} onChange={e => setInp(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAsk()} placeholder="Ask anything..." style={{ flex: 1 }} />
+          <button onClick={handleAsk} disabled={busy || !inp.trim() || !data} style={{ padding: "10px 20px", background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 600, fontFamily: "inherit", opacity: busy || !data ? 0.4 : 1 }}><Send size={15} /></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Cartoon Loading Animation ───────────────────────────────────────────────
+
+function LoadingAnimation({ date, hasGmail = true }) {
+  const firstStep = hasGmail ? "Parsing emails" : "Reading SMS inbox";
+  return (
+    <div style={{ padding: "44px 20px 36px", textAlign: "center" }} className="fade-in">
+      <svg viewBox="0 0 220 185" fill="none" xmlns="http://www.w3.org/2000/svg"
+        style={{ width: 220, height: 185, display: "block", margin: "0 auto 22px", overflow: "visible" }}>
+
+        {/* ── Box body ── */}
+        <rect x="80" y="118" width="92" height="60" rx="8" fill="#1A1A1A" stroke="rgba(255,255,255,0.07)" strokeWidth="1.5"/>
+        <line x1="126" y1="118" x2="126" y2="178" stroke="rgba(200,169,81,0.12)" strokeWidth="2"/>
+        <line x1="80" y1="148" x2="172" y2="148" stroke="rgba(200,169,81,0.08)" strokeWidth="1.5"/>
+        <rect x="94" y="128" width="44" height="26" rx="5" fill="rgba(200,169,81,0.06)" stroke="rgba(200,169,81,0.18)" strokeWidth="1"/>
+        <text x="116" y="145" textAnchor="middle" fontSize="9" fill="rgba(200,169,81,0.65)" fontFamily="system-ui, sans-serif">BANK</text>
+
+        {/* ── Box lid (bounces open) ── */}
+        <g className="cart-lid">
+          <rect x="75" y="106" width="102" height="17" rx="6" fill="#222" stroke="rgba(255,255,255,0.09)" strokeWidth="1.5"/>
+          <rect x="112" y="99" width="24" height="9" rx="3" fill="#282828" stroke="rgba(255,255,255,0.07)" strokeWidth="1"/>
+        </g>
+
+        {/* ── Receipt 1 — flies straight up ── */}
+        <g className="cart-receipt-1">
+          <rect x="104" y="78" width="24" height="32" rx="3" fill="#1C1C1C" stroke="rgba(255,255,255,0.13)" strokeWidth="1.2"/>
+          <line x1="109" y1="87" x2="124" y2="87" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
+          <line x1="109" y1="92" x2="124" y2="92" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
+          <line x1="109" y1="97" x2="119" y2="97" stroke="rgba(255,255,255,0.12)" strokeWidth="1"/>
+          <text x="116" y="86" textAnchor="middle" fontSize="8" fill="rgba(200,169,81,0.55)" fontFamily="system-ui">₹</text>
+        </g>
+
+        {/* ── Receipt 2 — flies up-right ── */}
+        <g className="cart-receipt-2">
+          <rect x="152" y="80" width="21" height="27" rx="3" fill="#1C1C1C" stroke="rgba(0,200,83,0.22)" strokeWidth="1.2"/>
+          <line x1="156" y1="88" x2="169" y2="88" stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
+          <line x1="156" y1="93" x2="169" y2="93" stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
+          <line x1="156" y1="98" x2="164" y2="98" stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
+        </g>
+
+        {/* ── Receipt 3 — flies up-left ── */}
+        <g className="cart-receipt-3">
+          <rect x="70" y="82" width="21" height="27" rx="3" fill="#1C1C1C" stroke="rgba(59,130,246,0.25)" strokeWidth="1.2"/>
+          <line x1="74" y1="90" x2="87" y2="90" stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
+          <line x1="74" y1="95" x2="87" y2="95" stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
+          <line x1="74" y1="100" x2="83" y2="100" stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
+        </g>
+
+        {/* ── Robot body ── */}
+        <rect x="16" y="118" width="40" height="50" rx="11" fill="#1A1A1A" stroke="rgba(255,255,255,0.07)" strokeWidth="1.5"/>
+        <rect x="24" y="131" width="24" height="15" rx="4" fill="rgba(200,169,81,0.07)" stroke="rgba(200,169,81,0.18)" strokeWidth="1"/>
+        <circle cx="36" cy="138" r="3.5" fill="rgba(200,169,81,0.35)"/>
+        <rect x="22" y="152" width="8" height="5" rx="2" fill="rgba(255,255,255,0.06)"/>
+        <rect x="42" y="152" width="8" height="5" rx="2" fill="rgba(255,255,255,0.06)"/>
+
+        {/* ── Robot head ── */}
+        <rect x="13" y="79" width="46" height="42" rx="13" fill="#1E1E1E" stroke="rgba(255,255,255,0.08)" strokeWidth="1.5"/>
+        {/* Antenna */}
+        <line x1="36" y1="79" x2="36" y2="68" stroke="rgba(255,255,255,0.18)" strokeWidth="2" strokeLinecap="round"/>
+        <circle cx="36" cy="65" r="4" fill="#C8A951" className="cart-antenna"/>
+
+        {/* Eyes (gold rectangular screens) */}
+        <rect x="18" y="88" width="13" height="9" rx="3" fill="rgba(200,169,81,0.1)" stroke="rgba(200,169,81,0.35)" strokeWidth="1"/>
+        <rect x="41" y="88" width="13" height="9" rx="3" fill="rgba(200,169,81,0.1)" stroke="rgba(200,169,81,0.35)" strokeWidth="1"/>
+        <rect className="cart-eyes" x="20" y="90" width="9" height="5" rx="1.5" fill="#C8A951"/>
+        <rect className="cart-eyes" x="43" y="90" width="9" height="5" rx="1.5" fill="#C8A951"/>
+
+        {/* Mouth grill lines */}
+        <line x1="21" y1="106" x2="51" y2="106" stroke="rgba(255,255,255,0.1)" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="24" y1="110" x2="48" y2="110" stroke="rgba(255,255,255,0.07)" strokeWidth="1" strokeLinecap="round"/>
+        <line x1="27" y1="114" x2="45" y2="114" stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeLinecap="round"/>
+
+        {/* ── Arm reaching toward box ── */}
+        <g className="cart-arm">
+          <path d="M 54 130 Q 66 126 80 128" stroke="rgba(255,255,255,0.18)" strokeWidth="9" strokeLinecap="round" fill="none"/>
+          <circle cx="82" cy="128" r="7" fill="#1E1E1E" stroke="rgba(255,255,255,0.12)" strokeWidth="1.2"/>
+          <line x1="78" y1="124" x2="86" y2="132" stroke="rgba(255,255,255,0.22)" strokeWidth="1.5" strokeLinecap="round"/>
+          <line x1="86" y1="124" x2="78" y2="132" stroke="rgba(255,255,255,0.22)" strokeWidth="1.5" strokeLinecap="round"/>
+        </g>
+
+        {/* Sparkles */}
+        <text x="174" y="70" fontSize="12" fill="rgba(200,169,81,0.4)" className="cart-receipt-1">✦</text>
+        <text x="60" y="58" fontSize="10" fill="rgba(59,130,246,0.4)" className="cart-receipt-2">✦</text>
+        <text x="188" y="102" fontSize="8" fill="rgba(0,200,83,0.4)" className="cart-receipt-3">✦</text>
+      </svg>
+
+      <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Pulling your transactions...</div>
+      <div style={{ fontSize: 12, color: "var(--w30)", marginBottom: 18 }}>{formatDateLong(date)}</div>
+
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 16 }}>
+        {[[firstStep, "cart-dot-1"], ["AI categorising", "cart-dot-2"], ["Building report", "cart-dot-3"]].map(([label, cls]) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "var(--w30)" }}>
+            <div className={cls} style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--gold)" }} />
+            {label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Page Transition Wrapper ──────────────────────────────────────────────────
+
+function PageTransition({ children }) {
+  const { pathname } = useLocation();
+  return (
+    <div key={pathname} className="page-slide">
+      {children}
+    </div>
+  );
+}
+
+// ─── Bottom Nav ───────────────────────────────────────────────────────────────
+
+function BottomNav() {
+  const location = useLocation();
+  const items = [
+    { path: "/", label: "Home", icon: Wallet },
+    { path: "/transactions", label: "Activity", icon: ArrowLeftRight },
+    { path: "/insights", label: "Insights", icon: BarChart2 },
+    { path: "/sms", label: "SMS", icon: MessageSquare },
+    { path: "/ai", label: "AI", icon: Sparkles },
+  ];
+  return (
+    <div className="nav">
+      {items.map(({ path, label, icon: Icon }) => {
+        const active = location.pathname === path;
+        return (
+          <Link key={path} to={path} className={`nav-btn ${active ? "active" : ""}`} style={{ textDecoration: "none" }}>
+            <Icon size={22} />
+            <span style={{ fontWeight: active ? 500 : 400 }}>{label}</span>
+            {active && <div style={{ width: 4, height: 4, borderRadius: 2, background: "var(--gold)", marginTop: 2 }} />}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
+
 export default function App() {
-  // Auth state
   const [authView, setAuthView] = useState(() => {
     const token = localStorage.getItem("token");
     const profile = localStorage.getItem("profile");
@@ -582,17 +898,17 @@ export default function App() {
   const idleTimerRef = useRef(null);
   const IDLE_TIMEOUT = 15 * 60 * 1000;
 
-  // Listen for 401 auth expiry from api.js
   useEffect(() => {
     function handleExpiry() {
       setCurrentProfile(null);
       setAuthView("profiles");
+      setData(null);
+      setError(null);
     }
     window.addEventListener("auth-expired", handleExpiry);
     return () => window.removeEventListener("auth-expired", handleExpiry);
   }, []);
 
-  // Auto-logout after 15 min of inactivity
   useEffect(() => {
     if (authView !== "dashboard") return;
     function resetTimer() {
@@ -602,6 +918,8 @@ export default function App() {
         setCurrentProfile(null);
         setPendingProfile(null);
         setAuthView("profiles");
+        setData(null);
+        setError(null);
       }, IDLE_TIMEOUT);
     }
     const events = ["mousemove", "mousedown", "keypress", "touchstart", "scroll", "click"];
@@ -628,10 +946,11 @@ export default function App() {
     setCurrentProfile(null);
     setPendingProfile(null);
     setAuthView("profiles");
+    setData(null);
+    setError(null);
   }
 
   // Dashboard state
-  const [tab, setTab] = useState("home");
   const [date, setDate] = useState(() => {
     const d = new Date();
     const pad = n => String(n).padStart(2, "0");
@@ -640,9 +959,6 @@ export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [search, setSearch] = useState("");
-  const [fType, setFType] = useState("all");
-  const [fBank, setFBank] = useState("all");
   const [msgs, setMsgs] = useState([{ role: "assistant", content: "Hey! Pick a date and fetch your report. Then ask me anything." }]);
   const [inp, setInp] = useState("");
   const [busy, setBusy] = useState(false);
@@ -683,8 +999,6 @@ export default function App() {
   function handleCategorySave(merchant, newCategory) {
     if (data) {
       const updated = { ...data };
-
-      // Update category on all matching txns across both lists, then re-split
       const all = [
         ...updated.transactions.map(t => t.merchant === merchant ? { ...t, category: newCategory } : t),
         ...updated.billPayments.map(t => t.merchant === merchant ? { ...t, category: newCategory } : t),
@@ -692,7 +1006,6 @@ export default function App() {
       updated.billPayments = all.filter(t => t.category === "Bill Payment");
       updated.transactions = all.filter(t => t.category !== "Bill Payment");
 
-      // Recalculate summary
       const debits = updated.transactions.filter(t => t.type === "debit");
       const totalSpent = Math.round(debits.reduce((s, t) => s + t.amount, 0));
       const totalBillPayment = Math.round(updated.billPayments.filter(t => t.type === "debit").reduce((s, t) => s + t.amount, 0));
@@ -714,7 +1027,7 @@ export default function App() {
     setEditTxn(null);
   }
 
-  // ── Auth screens ──────────────────────────────────────────────────────────
+  // ── Auth screens ────────────────────────────────────────────────────────────
   if (authView === "profiles") {
     return <ProfileSelect onSelect={handleProfileSelect} />;
   }
@@ -729,30 +1042,13 @@ export default function App() {
     );
   }
 
-  // ── Dashboard ─────────────────────────────────────────────────────────────
-  const txns = data?.transactions || [];
-  const bills = data?.billPayments || [];
-  const summary = data?.summary || {};
-  const categories = data?.categories || [];
-  const maxCat = categories[0]?.total || 1;
-  const allTxns = [...txns, ...bills];
-  const bankList = [...new Set(allTxns.map(t => t.bank))];
-  const filtered = allTxns.filter(t => {
-    if (search && !t.merchant.toLowerCase().includes(search.toLowerCase())) return false;
-    if (fType === "debit" && t.type !== "debit") return false;
-    if (fType === "credit" && t.type !== "credit") return false;
-    if (fType === "bill" && t.category !== "Bill Payment") return false;
-    if (fBank !== "all" && t.bank !== fBank) return false;
-    return true;
-  });
-
+  // ── Dashboard layout ─────────────────────────────────────────────────────────
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
-
+    <div style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 110 }}>
       {editTxn && <CategoryModal txn={editTxn} onSave={handleCategorySave} onClose={() => setEditTxn(null)} />}
 
-      {/* Header */}
-      <div style={{ padding: "24px 20px 16px" }}>
+      {/* Sticky header */}
+      <div className="sticky-header" style={{ padding: "20px 20px 14px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 40, height: 40, borderRadius: 12, background: "var(--gold-dim)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -761,7 +1057,12 @@ export default function App() {
             <div>
               <div style={{ fontSize: 18, fontWeight: 500 }}>Expense Tracker</div>
               {currentProfile && (
-                <div style={{ fontSize: 11, color: "var(--w30)", marginTop: 1 }}>{currentProfile.name}</div>
+                <div style={{ fontSize: 11, color: "var(--w30)", marginTop: 1, display: "flex", alignItems: "center", gap: 6 }}>
+                  {currentProfile.name}
+                  <span className="pill" style={{ background: "var(--gold-dim)", color: "var(--gold)" }}>
+                    {currentProfile.hasGmail !== false ? "Gmail" : "SMS only"}
+                  </span>
+                </div>
               )}
             </div>
           </div>
@@ -773,32 +1074,13 @@ export default function App() {
             <LogOut size={16} />
           </button>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={() => shiftDate(-1)} style={{ width: 36, height: 36, borderRadius: 10, background: "var(--card)", border: "1px solid var(--border)", color: "var(--w50)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><ChevronLeft size={18} /></button>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ flex: 1, textAlign: "center", fontSize: 14, fontWeight: 500 }} />
-          <button onClick={() => shiftDate(1)} style={{ width: 36, height: 36, borderRadius: 10, background: "var(--card)", border: "1px solid var(--border)", color: "var(--w50)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><ChevronRight size={18} /></button>
-          <button onClick={() => handleFetch(false)} disabled={loading} style={{ padding: "8px 20px", background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6, opacity: loading ? 0.5 : 1 }}>
-            {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />} {loading ? "Loading" : "Fetch"}
-          </button>
-          <button
-            onClick={() => handleFetch(true)}
-            disabled={loading}
-            title="Refresh — re-fetch from Gmail and sync new transactions"
-            style={{ width: 36, height: 36, borderRadius: 10, background: "var(--card)", border: "1px solid var(--border)", color: data ? "var(--gold)" : "var(--w30)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1, flexShrink: 0 }}
-          >
-            <RotateCw size={15} />
-          </button>
-        </div>
+
+        {/* Date controls — shown on home & transactions, hidden on insights/sms/ai */}
+        <DateControls date={date} setDate={setDate} shiftDate={shiftDate} handleFetch={handleFetch} loading={loading} data={data} />
       </div>
 
-      {/* States */}
-      {loading && (
-        <div style={{ padding: "60px 20px", textAlign: "center" }} className="fade-in">
-          <Loader2 size={36} className="spin" style={{ color: "var(--gold)", marginBottom: 16 }} />
-          <div style={{ fontSize: 14, color: "var(--w50)" }}>Fetching transactions for {formatDateLong(date)}...</div>
-          <div style={{ fontSize: 12, color: "var(--w30)", marginTop: 6 }}>Regex parsing → AI categorizing → Building report</div>
-        </div>
-      )}
+      {/* Loading / error / empty */}
+      {loading && <LoadingAnimation date={date} hasGmail={currentProfile?.hasGmail !== false} />}
       {error && !loading && (
         <div style={{ padding: "40px 20px", textAlign: "center" }} className="fade-in">
           <div style={{ width: 56, height: 56, borderRadius: 16, background: "var(--red-bg)", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}><AlertCircle size={28} style={{ color: "var(--red)" }} /></div>
@@ -807,127 +1089,56 @@ export default function App() {
           <button onClick={handleFetch} style={{ marginTop: 20, padding: "10px 24px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--gold)", cursor: "pointer", fontSize: 13, fontFamily: "inherit", fontWeight: 500 }}>Try again</button>
         </div>
       )}
-      {!data && !loading && !error && (
-        <div style={{ padding: "60px 20px", textAlign: "center" }} className="fade-in">
-          <div style={{ fontSize: 40, marginBottom: 16 }}>📊</div>
-          <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Pick a date & hit Fetch</div>
-          <div style={{ fontSize: 13, color: "var(--w30)" }}>Your daily expense report will appear here</div>
-        </div>
-      )}
 
-      {/* HOME */}
-      {data && !loading && tab === "home" && (
-        <div style={{ padding: "0 20px" }} className="fade-in">
-          {txns.length === 0 && bills.length === 0 ? (
-            <div className="card" style={{ padding: "40px 20px", textAlign: "center" }}><div style={{ fontSize: 32, marginBottom: 12 }}>🤷</div><div style={{ fontSize: 14, color: "var(--w50)" }}>{data.message || "No transactions"}</div></div>
-          ) : (<>
-            <div className="card glow" style={{ padding: 24, marginBottom: 14, position: "relative", overflow: "hidden" }}>
-              <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, var(--gold-dim) 0%, transparent 70%)" }} />
-              <div style={{ fontSize: 12, color: "var(--w30)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>Total spent</div>
-              <div style={{ fontSize: 38, fontWeight: 300, letterSpacing: -1 }}><span style={{ color: "var(--w30)", fontSize: 24 }}>₹</span>{fmt(summary.totalSpent)}</div>
-              <div style={{ fontSize: 13, color: "var(--w30)", marginTop: 8 }}>
-                {summary.debitCount} txn{summary.debitCount !== 1 ? "s" : ""} · {formatDateLong(date)}
-                {summary.totalBillPayment > 0 && <span style={{ color: "var(--blue)", marginLeft: 6 }}>· excl. ₹{fmt(summary.totalBillPayment)} bills</span>}
-              </div>
-            </div>
-
-            {(() => {
-              const showIn = summary.totalCredit > 0;
-              const showBills = summary.totalBillPayment > 0;
-              const cols = 1 + (showIn ? 1 : 0) + (showBills ? 1 : 0);
-              return (
-                <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10, marginBottom: 24 }}>
-                  <SummaryCard icon={ArrowUpRight} label="Out" value={summary.totalSpent} colorVar="red" />
-                  {showIn && <SummaryCard icon={ArrowDownLeft} label="In" value={summary.totalCredit} colorVar="green" />}
-                  {showBills && <SummaryCard icon={CreditCard} label="Bills" value={summary.totalBillPayment} colorVar="blue" />}
+      {/* Page routes */}
+      {!loading && !error && (
+        <PageTransition>
+        <Routes>
+          <Route path="/" element={
+            data
+              ? <HomePage data={data} date={date} setEditTxn={setEditTxn} />
+              : <div style={{ padding: "60px 20px", textAlign: "center" }} className="fade-in">
+                  <div style={{ fontSize: 40, marginBottom: 16 }}>📊</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Pick a date & hit Fetch</div>
+                  <div style={{ fontSize: 13, color: "var(--w30)" }}>Your daily expense report will appear here</div>
                 </div>
-              );
-            })()}
-
-            {categories.length > 0 && (
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 16 }}>Where it went</div>
-                <div className="card" style={{ padding: "6px 20px" }}>
-                  {categories.map(cat => <CategoryRow key={cat.name} cat={cat} maxTotal={maxCat} />)}
-                </div>
-              </div>
-            )}
-
-            {txns.length > 0 && (
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                  <div style={{ fontSize: 16, fontWeight: 500 }}>Transactions</div>
-                  <button onClick={() => setTab("transactions")} style={{ fontSize: 12, color: "var(--gold)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 4 }}>See all <ChevronRight size={14} /></button>
-                </div>
-                <div className="card">
-                  {txns.slice(0, 5).map((t, i) => <TransactionRow key={i} txn={t} onEditCategory={setEditTxn} />)}
-                </div>
-              </div>
-            )}
-          </>)}
-        </div>
+          } />
+          <Route path="/transactions" element={<TransactionsPage data={data} setEditTxn={setEditTxn} />} />
+          <Route path="/insights" element={<InsightsPage />} />
+          <Route path="/sms" element={<SmsPage date={date} />} />
+          <Route path="/ai" element={<AiPage data={data} msgs={msgs} setMsgs={setMsgs} inp={inp} setInp={setInp} busy={busy} handleAsk={handleAsk} />} />
+        </Routes>
+        </PageTransition>
       )}
 
-      {/* TRANSACTIONS */}
-      {data && !loading && tab === "transactions" && (
-        <div style={{ padding: "0 20px" }} className="fade-in">
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            <div style={{ flex: 1, position: "relative" }}>
-              <Search size={15} style={{ position: "absolute", left: 14, top: 12, color: "var(--w30)" }} />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." style={{ width: "100%", paddingLeft: 36 }} />
-            </div>
-            <select value={fType} onChange={e => setFType(e.target.value)} style={{ width: 90, paddingRight: 8 }}><option value="all">All</option><option value="debit">Spent</option><option value="credit">Received</option><option value="bill">Bills</option></select>
-            <select value={fBank} onChange={e => setFBank(e.target.value)} style={{ width: 90, paddingRight: 8 }}><option value="all">All banks</option>{bankList.map(b => <option key={b} value={b}>{b}</option>)}</select>
-          </div>
-          <div style={{ fontSize: 12, color: "var(--w30)", marginBottom: 14 }}>{filtered.length} transaction{filtered.length !== 1 ? "s" : ""}</div>
-          <div className="card">
-            {filtered.length === 0 ? <div style={{ padding: 40, textAlign: "center", color: "var(--w30)", fontSize: 13 }}>No matching transactions</div>
-              : filtered.map((t, i) => <TransactionRow key={i} txn={t} onEditCategory={setEditTxn} />)}
-          </div>
-        </div>
-      )}
+      <BottomNav />
+    </div>
+  );
+}
 
-      {/* SMS INBOX */}
-      {tab === "sms" && (
-        <SmsTab date={date} />
-      )}
+// ─── Date Controls (separated to use useLocation) ─────────────────────────────
 
-      {/* INSIGHTS */}
-      {tab === "insights" && (
-        <InsightsView />
-      )}
+function DateControls({ date, setDate, shiftDate, handleFetch, loading, data }) {
+  const location = useLocation();
+  const hideOnRoutes = ["/insights", "/sms", "/ai"];
+  if (hideOnRoutes.includes(location.pathname)) return null;
 
-      {/* AI CHAT */}
-      {data && !loading && tab === "ai" && (
-        <div style={{ padding: "0 20px" }} className="fade-in">
-          <div className="card" style={{ padding: 20, minHeight: 420, display: "flex", flexDirection: "column" }}>
-            <div style={{ flex: 1, overflowY: "auto", marginBottom: 14 }}>
-              {msgs.map((m, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 14 }}>
-                  {m.role === "assistant" && <div style={{ width: 32, height: 32, borderRadius: 10, background: "var(--gold-dim)", display: "flex", alignItems: "center", justifyContent: "center", marginRight: 10, flexShrink: 0, marginTop: 2 }}><Sparkles size={16} style={{ color: "var(--gold)" }} /></div>}
-                  <div className="bubble" style={{ background: m.role === "user" ? "var(--gold)" : "var(--w10)", color: m.role === "user" ? "#0A0A0A" : "var(--w80)", borderBottomRightRadius: m.role === "user" ? 4 : 18, borderBottomLeftRadius: m.role === "assistant" ? 4 : 18, fontWeight: m.role === "user" ? 500 : 400 }}>{m.content}</div>
-                </div>
-              ))}
-              {busy && <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}><div style={{ width: 32, height: 32, borderRadius: 10, background: "var(--gold-dim)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Sparkles size={16} style={{ color: "var(--gold)" }} /></div><div className="bubble" style={{ background: "var(--w10)", color: "var(--w30)", display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}><Loader2 size={14} className="spin" /> Thinking...</div></div>}
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-              {["Food spend?", "Biggest expense?", "Which card most?", "Am I overspending?"].map(q => <button className="chip" key={q} onClick={() => setInp(q)}>{q}</button>)}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input value={inp} onChange={e => setInp(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAsk()} placeholder="Ask anything..." style={{ flex: 1 }} />
-              <button onClick={handleAsk} disabled={busy || !inp.trim() || !data} style={{ padding: "10px 20px", background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 600, fontFamily: "inherit", opacity: busy || !data ? 0.4 : 1 }}><Send size={15} /></button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Nav */}
-      <div className="nav">
-        {[{ id: "home", label: "Home", icon: Wallet }, { id: "transactions", label: "Activity", icon: ArrowLeftRight }, { id: "insights", label: "Insights", icon: BarChart2 }, { id: "sms", label: "SMS", icon: MessageSquare }, { id: "ai", label: "AI", icon: Sparkles }].map(t => {
-          const Icon = t.icon; const active = tab === t.id;
-          return <button key={t.id} className={`nav-btn ${active ? "active" : ""}`} onClick={() => setTab(t.id)}><Icon size={22} /><span style={{ fontWeight: active ? 500 : 400 }}>{t.label}</span>{active && <div style={{ width: 4, height: 4, borderRadius: 2, background: "var(--gold)", marginTop: 2 }} />}</button>;
-        })}
-      </div>
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <button onClick={() => shiftDate(-1)} style={{ width: 36, height: 36, borderRadius: 10, background: "var(--card)", border: "1px solid var(--border)", color: "var(--w50)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><ChevronLeft size={18} /></button>
+      <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ flex: 1, textAlign: "center", fontSize: 14, fontWeight: 500 }} />
+      <button onClick={() => shiftDate(1)} style={{ width: 36, height: 36, borderRadius: 10, background: "var(--card)", border: "1px solid var(--border)", color: "var(--w50)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><ChevronRight size={18} /></button>
+      <button onClick={() => handleFetch(false)} disabled={loading} style={{ padding: "8px 20px", background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6, opacity: loading ? 0.5 : 1 }}>
+        {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />} {loading ? "Loading" : "Fetch"}
+      </button>
+      <button
+        onClick={() => handleFetch(true)}
+        disabled={loading}
+        title="Refresh — re-fetch from Gmail and sync new transactions"
+        style={{ width: 36, height: 36, borderRadius: 10, background: "var(--card)", border: "1px solid var(--border)", color: data ? "var(--gold)" : "var(--w30)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1, flexShrink: 0 }}
+      >
+        <RotateCw size={15} />
+      </button>
     </div>
   );
 }

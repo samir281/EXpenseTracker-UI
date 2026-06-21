@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: "./tests",
   timeout: 30000,
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || "https://moneymap-in.netlify.app",
     headless: false,
     viewport: { width: 480, height: 850 },
     screenshot: "only-on-failure",
