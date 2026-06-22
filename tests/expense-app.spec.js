@@ -73,6 +73,10 @@ async function mockAPI(page, { wrongPin = false } = {}) {
     route.fulfill({ json: { success: true, entries: [] } })
   );
 
+  await page.route(`**/api/budget`, route =>
+    route.fulfill({ json: { success: true, budget: 15000, spent: 9200, monthLabel: "June" } })
+  );
+
   await page.route(`**/api/insights**`, route =>
     route.fulfill({ json: {
       success: true, from: "2026-05-21", to: "2026-06-20",
@@ -304,4 +308,15 @@ test("insights tab shows search form and returns results", async ({ page }) => {
   await expect(page.locator("text=₹2,340").first()).toBeVisible();
   await expect(page.locator("text=By merchant")).toBeVisible();
   await expect(page.locator("text=missing")).toBeVisible();
+});
+
+// ── 13. Monthly budget bar shows and updates ─────────────────────────────────
+test("monthly budget bar shows spend vs budget", async ({ page }) => {
+  await mockAPI(page);
+  await login(page);
+
+  // Budget mock = ₹9,200 of ₹15,000 → 61%
+  await expect(page.locator("text=June budget")).toBeVisible();
+  await expect(page.locator("text=61%")).toBeVisible();
+  await expect(page.getByText("of ₹15,000")).toBeVisible();
 });

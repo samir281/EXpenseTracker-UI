@@ -118,6 +118,25 @@ export async function deleteSMSEntry(id) {
   return result.data;
 }
 
+export async function fetchBudget() {
+  const result = await apiFetch("/api/budget");
+  if (!result) throw new Error("Login required");
+  const { res, data } = result;
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load budget");
+  return data;
+}
+
+export async function saveBudget(budget) {
+  const result = await apiFetch("/api/budget", {
+    method: "POST",
+    body: JSON.stringify({ budget }),
+  });
+  if (!result) throw new Error("Login required");
+  const { res, data } = result;
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to save budget");
+  return data;
+}
+
 export async function fetchInsights({ from, to, merchant, category }) {
   const params = new URLSearchParams({ from, to });
   if (merchant) params.set("merchant", merchant);

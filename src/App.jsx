@@ -6,7 +6,7 @@ import {
   ArrowLeftRight, Send, Loader2, AlertCircle, Pencil, Check, X, Plus,
   LogOut, MessageSquare, Trash2, BarChart2,
 } from "lucide-react";
-import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin, submitSMS, fetchSMSInbox, deleteSMSEntry, fetchInsights } from "./api";
+import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin, submitSMS, fetchSMSInbox, deleteSMSEntry, fetchInsights, fetchBudget, saveBudget } from "./api";
 import { getCategoryConfig, CATEGORY_NAMES, fmt, formatDateLong } from "./constants";
 
 // ─── Auth Screens ─────────────────────────────────────────────────────────────
@@ -296,6 +296,115 @@ function CategoryModal({ txn, onSave, onClose }) {
           style={{ width: "100%", padding: "12px", background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 12, cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: saving ? 0.5 : 1 }}>
           {saving ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
           {saving ? "Saving..." : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Monthly Budget Bar ───────────────────────────────────────────────────────
+
+function BudgetBar({ data, onEdit }) {
+  // Not loaded yet
+  if (!data) return null;
+
+  const { budget = 0, spent = 0, monthLabel = "" } = data;
+
+  // No budget set → prompt
+  if (!budget || budget <= 0) {
+    return (
+      <button
+        onClick={onEdit}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 14px", marginBottom: 14, background: "var(--gold-dim)", border: "1px dashed var(--gold)", borderRadius: 12, color: "var(--gold)", cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 500 }}
+      >
+        <Plus size={14} /> Set a monthly budget
+      </button>
+    );
+  }
+
+  const pct = Math.round((spent / budget) * 100);
+  const fill = Math.min(pct, 100);
+  const over = spent > budget;
+  const remaining = budget - spent;
+
+  // gold → amber → red
+  const color = pct >= 100 ? "var(--red)" : pct >= 75 ? "#F59E0B" : "var(--gold)";
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
+        <span style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: "var(--w30)" }}>
+          {monthLabel} budget
+        </span>
+        <button onClick={onEdit} style={{ fontSize: 11, color: "var(--gold)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", padding: 0 }}>
+          Edit
+        </button>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+        <span style={{ fontSize: 14, fontWeight: 500 }}>
+          ₹{fmt(spent)} <span style={{ color: "var(--w30)", fontWeight: 400 }}>of ₹{fmt(budget)}</span>
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 600, color }}>{pct}%</span>
+      </div>
+
+      <div style={{ height: 8, borderRadius: 4, background: "var(--w10)", overflow: "hidden" }}>
+        <div style={{ width: `${fill}%`, height: "100%", borderRadius: 4, background: `linear-gradient(90deg, ${color}99, ${color})`, transition: "width 0.6s cubic-bezier(0.4,0,0.2,1)" }} />
+      </div>
+
+      <div style={{ fontSize: 11, marginTop: 6, color: over ? "var(--red)" : "var(--w30)" }}>
+        {over ? `⚠ ₹${fmt(Math.abs(remaining))} over budget` : `₹${fmt(remaining)} left`}
+      </div>
+    </div>
+  );
+}
+
+function BudgetModal({ current, onSave, onClose }) {
+  const [value, setValue] = useState(current > 0 ? String(current) : "");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return;
+    setSaving(true);
+    try {
+      const result = await saveBudget(n);
+      onSave(result);
+    } catch (e) {
+      alert("Failed to save: " + e.message);
+    }
+    setSaving(false);
+  }
+
+  return (
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div className="card" style={{ padding: 24, maxWidth: 340, width: "100%" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 500 }}>Monthly Budget</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--w30)" }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div style={{ fontSize: 13, color: "var(--w50)", marginBottom: 8 }}>Set your spending limit for the month</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+          <span style={{ fontSize: 22, color: "var(--w30)" }}>₹</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleSave()}
+            placeholder="15000"
+            autoFocus
+            style={{ flex: 1, fontSize: 20, fontWeight: 500, padding: "10px 14px" }}
+          />
+        </div>
+
+        <button onClick={handleSave} disabled={saving || value === ""}
+          style={{ width: "100%", padding: 12, background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 12, cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: saving || value === "" ? 0.5 : 1 }}>
+          {saving ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
+          {saving ? "Saving..." : "Save Budget"}
         </button>
       </div>
     </div>
@@ -948,6 +1057,7 @@ export default function App() {
     setAuthView("profiles");
     setData(null);
     setError(null);
+    setBudget(null);
   }
 
   // Dashboard state
@@ -963,6 +1073,18 @@ export default function App() {
   const [inp, setInp] = useState("");
   const [busy, setBusy] = useState(false);
   const [editTxn, setEditTxn] = useState(null);
+  const [budget, setBudget] = useState(null);
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
+
+  async function refreshBudget() {
+    try { setBudget(await fetchBudget()); } catch {}
+  }
+
+  // Load budget when entering the dashboard
+  useEffect(() => {
+    if (authView !== "dashboard") return;
+    refreshBudget();
+  }, [authView]);
 
   async function handleFetch(refresh = false) {
     setLoading(true); setError(null); setData(null);
@@ -970,6 +1092,7 @@ export default function App() {
       const result = await fetchReport(date, refresh);
       setData(result);
       setMsgs([{ role: "assistant", content: `Report loaded for ${formatDateLong(date)}! ${result.transactions.length} transactions, ₹${fmt(result.summary.totalSpent)} spent. Ask me anything.` }]);
+      refreshBudget();
     } catch (e) { setError(e.message); }
     setLoading(false);
   }
@@ -1025,6 +1148,7 @@ export default function App() {
       setData(updated);
     }
     setEditTxn(null);
+    refreshBudget();
   }
 
   // ── Auth screens ────────────────────────────────────────────────────────────
@@ -1046,6 +1170,13 @@ export default function App() {
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 110 }}>
       {editTxn && <CategoryModal txn={editTxn} onSave={handleCategorySave} onClose={() => setEditTxn(null)} />}
+      {showBudgetModal && (
+        <BudgetModal
+          current={budget?.budget || 0}
+          onSave={(result) => { setBudget(result); setShowBudgetModal(false); }}
+          onClose={() => setShowBudgetModal(false)}
+        />
+      )}
 
       {/* Sticky header */}
       <div className="sticky-header" style={{ padding: "max(20px, env(safe-area-inset-top)) 20px 14px" }}>
@@ -1074,6 +1205,9 @@ export default function App() {
             <LogOut size={16} />
           </button>
         </div>
+
+        {/* Monthly budget bar — above the date */}
+        <BudgetBar data={budget} onEdit={() => setShowBudgetModal(true)} />
 
         {/* Date controls — shown on home & transactions, hidden on insights/sms/ai */}
         <DateControls date={date} setDate={setDate} shiftDate={shiftDate} handleFetch={handleFetch} loading={loading} data={data} />
