@@ -18,9 +18,9 @@ const MOCK_REPORT = {
     debitCount: 3,
   },
   transactions: [
-    { merchant: "Swiggy", category: "Food Delivery", type: "debit", amount: 450, bank: "HDFC", cardType: "UPI", time: "12:30" },
-    { merchant: "Zepto", category: "Quick Commerce", type: "debit", amount: 390, bank: "HDFC", cardType: "UPI", time: "10:15" },
-    { merchant: "Uber", category: "Cab / Ride", type: "debit", amount: 410, bank: "Kotak", cardType: "UPI", time: "09:00" },
+    { merchant: "Swiggy", category: "Food Delivery", type: "debit", amount: 450, bank: "HDFC", cardType: "UPI", time: "12:30", hash: "hash-swiggy", date: "2026-06-20" },
+    { merchant: "Zepto", category: "Quick Commerce", type: "debit", amount: 390, bank: "HDFC", cardType: "UPI", time: "10:15", hash: "hash-zepto", date: "2026-06-20" },
+    { merchant: "Uber", category: "Cab / Ride", type: "debit", amount: 410, bank: "Kotak", cardType: "UPI", time: "09:00", hash: "hash-uber", date: "2026-06-20" },
   ],
   billPayments: [
     { merchant: "CRED Club", category: "Bill Payment", type: "debit", amount: 5000, bank: "HDFC", cardType: "UPI", time: "08:00" },
@@ -58,6 +58,10 @@ async function mockAPI(page, { wrongPin = false } = {}) {
   );
 
   await page.route(`**/api/override`, route =>
+    route.fulfill({ json: { success: true } })
+  );
+
+  await page.route(`**/api/adjustment`, route =>
     route.fulfill({ json: { success: true } })
   );
 
@@ -186,9 +190,9 @@ test("marking a transaction as Bill Payment updates summary instantly", async ({
   const exclBillsSpan = page.locator("span").filter({ hasText: /excl\. ₹/ });
   const billsBefore = await exclBillsSpan.textContent();
 
-  // Click pencil on Swiggy (first debit row)
+  // Click pencil on Swiggy (last button in row — scissors is first, pencil last)
   const swiggyRow = page.locator(".txn-row").filter({ hasText: "Swiggy" });
-  await swiggyRow.locator("button").click();
+  await swiggyRow.locator("button").last().click();
   await expect(page.locator("text=Edit Category")).toBeVisible();
 
   // Mark as Bill Payment and save
@@ -269,7 +273,7 @@ test("category save is intercepted by the mock and never reaches a real backend"
   await page.locator("button").filter({ hasText: "Fetch" }).click();
   await expect(page.locator("text=Swiggy")).toBeVisible();
 
-  await page.locator(".txn-row").filter({ hasText: "Swiggy" }).locator("button").click();
+  await page.locator(".txn-row").filter({ hasText: "Swiggy" }).locator("button").last().click();
   await page.locator("button").filter({ hasText: "Bill Payment" }).click();
   await page.locator("button").filter({ hasText: "Save" }).click();
 
@@ -378,4 +382,61 @@ test("activity page exports transactions as CSV", async ({ page }) => {
     page.getByText("CSV", { exact: true }).click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/transactions-.*\.csv/);
+});
+
+// ── 16. Cancel out (adjustment) sends amount + reason to the API ──────────────
+test("cancelling out an amount posts the adjustment with a reason", async ({ page }) => {
+  await mockAPI(page);
+
+  let adjustBody = null;
+  await page.route(`**/api/adjustment`, route => {
+    if (route.request().method() === "POST") {
+      adjustBody = JSON.parse(route.request().postData() || "{}");
+    }
+    route.fulfill({ json: { success: true } });
+  });
+
+  await login(page);
+  await page.locator("button").filter({ hasText: "Fetch" }).click();
+  await expect(page.locator("text=Swiggy")).toBeVisible();
+
+  // Scissors is the first button in a spend row; opens the cancel-out modal.
+  await page.locator(".txn-row").filter({ hasText: "Swiggy" }).locator("button").first().click();
+  await expect(page.getByText("Cancel out")).toBeVisible();
+
+  await page.locator('input[type="number"]').fill("100");
+  await page.locator('input[placeholder*="cash returned"]').fill("refund coming");
+
+  await Promise.all([
+    page.waitForRequest(req => req.url().includes("/api/adjustment") && req.method() === "POST"),
+    page.locator("button").filter({ hasText: "Save" }).click(),
+  ]);
+
+  expect(adjustBody).toMatchObject({ txnHash: "hash-swiggy", date: "2026-06-20", amount: 100, reason: "refund coming" });
+});
+
+// ── 17. A returned adjustment renders the cancel-out note + effective amount ───
+test("a transaction with an adjustment shows the strikethrough and reason", async ({ page }) => {
+  await mockAPI(page);
+  // Override report so Swiggy comes back already adjusted.
+  await page.route(`**/api/report**`, route =>
+    route.fulfill({ json: {
+      ...MOCK_REPORT,
+      summary: { ...MOCK_REPORT.summary, totalSpent: 1150 },
+      transactions: [
+        { ...MOCK_REPORT.transactions[0], adjustment: { amount: 100, reason: "refund coming" }, effectiveAmount: 350 },
+        MOCK_REPORT.transactions[1],
+        MOCK_REPORT.transactions[2],
+      ],
+    }})
+  );
+
+  await login(page);
+  await page.locator("button").filter({ hasText: "Fetch" }).click();
+  await expect(page.locator("text=Swiggy")).toBeVisible();
+
+  const swiggyRow = page.locator(".txn-row").filter({ hasText: "Swiggy" });
+  await expect(swiggyRow.getByText(/refund coming/)).toBeVisible();
+  await expect(swiggyRow.getByText("₹350")).toBeVisible();      // effective
+  await expect(swiggyRow.getByText("₹450")).toBeVisible();      // struck-through original
 });

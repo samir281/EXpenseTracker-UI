@@ -4,9 +4,9 @@ import {
   Wallet, Search, ChevronLeft, ChevronRight, RefreshCw, RotateCw,
   ArrowUpRight, ArrowDownLeft, CreditCard, Sparkles,
   ArrowLeftRight, Send, Loader2, AlertCircle, Pencil, Check, X, Plus,
-  LogOut, MessageSquare, Trash2, BarChart2, Calendar, Download,
+  LogOut, MessageSquare, Trash2, BarChart2, Calendar, Download, Scissors,
 } from "lucide-react";
-import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin, submitSMS, fetchSMSInbox, deleteSMSEntry, fetchInsights, fetchBudget, saveBudget, fetchMonthly } from "./api";
+import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin, submitSMS, fetchSMSInbox, deleteSMSEntry, fetchInsights, fetchBudget, saveBudget, fetchMonthly, saveAdjustment, deleteAdjustment } from "./api";
 import { getCategoryConfig, CATEGORY_NAMES, fmt, formatDateLong } from "./constants";
 import { exportTable } from "./export";
 
@@ -202,10 +202,14 @@ function CategoryRow({ cat, maxTotal }) {
   );
 }
 
-function TransactionRow({ txn, onEditCategory }) {
+function TransactionRow({ txn, onEditCategory, onAdjust }) {
   const { icon: Icon, color } = getCategoryConfig(txn.category);
   const isDebit = txn.type === "debit";
   const isBill = txn.category === "Bill Payment";
+  const adj = txn.adjustment;
+  const effective = adj ? txn.amount - adj.amount : txn.amount;
+  // Only spend (debit, non-bill) can be cancelled out.
+  const canAdjust = isDebit && !isBill && onAdjust;
 
   return (
     <div className="txn-row">
@@ -220,16 +224,90 @@ function TransactionRow({ txn, onEditCategory }) {
           {" · "}{txn.bank} · {txn.cardType} · {txn.time || "—"}
         </div>
         {txn.merchantVPA && <div style={{ fontSize: 11, color: "var(--w10)", marginTop: 2 }}>{txn.merchantVPA}</div>}
+        {adj && (
+          <div style={{ fontSize: 11, color: "var(--gold)", marginTop: 3, display: "flex", alignItems: "center", gap: 4 }}>
+            <Scissors size={11} /> −₹{fmt(adj.amount)}{adj.reason ? ` · ${adj.reason}` : ""}
+          </div>
+        )}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 14, fontWeight: 500, color: isBill ? "var(--blue)" : isDebit ? "var(--red)" : "var(--green)" }}>
-            {isDebit ? "-" : "+"}₹{fmt(txn.amount)}
+            {isDebit ? "-" : "+"}₹{fmt(effective)}
           </div>
+          {adj && (
+            <div style={{ fontSize: 11, color: "var(--w30)", textDecoration: "line-through" }}>₹{fmt(txn.amount)}</div>
+          )}
         </div>
+        {canAdjust && (
+          <button onClick={() => onAdjust(txn)} title="Cancel out an amount"
+            style={{ width: 28, height: 28, borderRadius: 8, background: adj ? "var(--gold-dim)" : "var(--w10)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Scissors size={12} style={{ color: adj ? "var(--gold)" : "var(--w30)" }} />
+          </button>
+        )}
         <button onClick={() => onEditCategory(txn)} style={{ width: 28, height: 28, borderRadius: 8, background: "var(--w10)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Pencil size={12} style={{ color: "var(--w30)" }} />
         </button>
+      </div>
+    </div>
+  );
+}
+
+function AdjustModal({ txn, onSave, onDelete, onClose }) {
+  const existing = txn.adjustment;
+  const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
+  const [reason, setReason] = useState(existing?.reason || "");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value <= 0) { alert("Enter an amount to cancel out"); return; }
+    if (value > txn.amount) { alert(`Can't cancel out more than ₹${fmt(txn.amount)}`); return; }
+    setSaving(true);
+    try {
+      await saveAdjustment(txn.hash, txn.date, value, reason.trim());
+      onSave();
+    } catch (e) { alert("Failed: " + e.message); setSaving(false); }
+  }
+
+  async function handleRemove() {
+    setSaving(true);
+    try { await deleteAdjustment(txn.hash); onDelete(); }
+    catch (e) { alert("Failed: " + e.message); setSaving(false); }
+  }
+
+  return (
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div className="card" style={{ padding: 24, maxWidth: 360, width: "100%" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}><Scissors size={16} style={{ color: "var(--gold)" }} /> Cancel out</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--w30)" }}><X size={20} /></button>
+        </div>
+
+        <div style={{ fontSize: 13, color: "var(--w50)", marginBottom: 4 }}>Transaction</div>
+        <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 16 }}>{txn.merchant} · ₹{fmt(txn.amount)}</div>
+
+        <div style={{ fontSize: 13, color: "var(--w50)", marginBottom: 8 }}>Amount to subtract</div>
+        <input type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder={`Max ₹${fmt(txn.amount)}`} style={{ width: "100%", marginBottom: 16 }} autoFocus />
+
+        <div style={{ fontSize: 13, color: "var(--w50)", marginBottom: 8 }}>Justification</div>
+        <input value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. cash returned on Jun 6" style={{ width: "100%", marginBottom: 16 }} />
+
+        <div style={{ fontSize: 11, color: "var(--w30)", marginBottom: 16 }}>
+          This reduces the day's spend, monthly OUT, and your budget bar.
+        </div>
+
+        <button onClick={handleSave} disabled={saving}
+          style={{ width: "100%", padding: "12px", background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 12, cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: saving ? 0.5 : 1 }}>
+          {saving ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
+          {saving ? "Saving..." : "Save"}
+        </button>
+        {existing && (
+          <button onClick={handleRemove} disabled={saving}
+            style={{ width: "100%", marginTop: 10, padding: "10px", background: "transparent", color: "var(--red)", border: "1px solid var(--border)", borderRadius: 12, cursor: "pointer", fontSize: 13, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <Trash2 size={14} /> Remove cancel-out
+          </button>
+        )}
       </div>
     </div>
   );
@@ -414,7 +492,7 @@ function BudgetModal({ current, onSave, onClose }) {
 
 // ─── Home Page ────────────────────────────────────────────────────────────────
 
-function HomePage({ data, date, setEditTxn }) {
+function HomePage({ data, date, setEditTxn, setAdjustTxn }) {
   const summary = data?.summary || {};
   const txns = data?.transactions || [];
   const bills = data?.billPayments || [];
@@ -479,7 +557,7 @@ function HomePage({ data, date, setEditTxn }) {
             </Link>
           </div>
           <div className="card">
-            {txns.slice(0, 5).map((t, i) => <TransactionRow key={i} txn={t} onEditCategory={setEditTxn} />)}
+            {txns.slice(0, 5).map((t, i) => <TransactionRow key={i} txn={t} onEditCategory={setEditTxn} onAdjust={setAdjustTxn} />)}
           </div>
         </div>
       )}
@@ -504,7 +582,7 @@ function HomePage({ data, date, setEditTxn }) {
 
 // ─── Transactions Page ────────────────────────────────────────────────────────
 
-function TransactionsPage({ data, setEditTxn, date }) {
+function TransactionsPage({ data, setEditTxn, setAdjustTxn, date }) {
   const [search, setSearch] = useState("");
   const [fType, setFType] = useState("all");
   const [fBank, setFBank] = useState("all");
@@ -573,7 +651,7 @@ function TransactionsPage({ data, setEditTxn, date }) {
       <div className="card">
         {filtered.length === 0
           ? <div style={{ padding: 40, textAlign: "center", color: "var(--w30)", fontSize: 13 }}>No matching transactions</div>
-          : filtered.map((t, i) => <TransactionRow key={i} txn={t} onEditCategory={setEditTxn} />)
+          : filtered.map((t, i) => <TransactionRow key={i} txn={t} onEditCategory={setEditTxn} onAdjust={setAdjustTxn} />)
         }
       </div>
     </div>
@@ -1245,6 +1323,7 @@ export default function App() {
   const [inp, setInp] = useState("");
   const [busy, setBusy] = useState(false);
   const [editTxn, setEditTxn] = useState(null);
+  const [adjustTxn, setAdjustTxn] = useState(null);
   const [budget, setBudget] = useState(null);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
 
@@ -1342,6 +1421,14 @@ export default function App() {
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 110 }}>
       {editTxn && <CategoryModal txn={editTxn} onSave={handleCategorySave} onClose={() => setEditTxn(null)} />}
+      {adjustTxn && (
+        <AdjustModal
+          txn={adjustTxn}
+          onSave={() => { setAdjustTxn(null); handleFetch(); }}
+          onDelete={() => { setAdjustTxn(null); handleFetch(); }}
+          onClose={() => setAdjustTxn(null)}
+        />
+      )}
       {showBudgetModal && (
         <BudgetModal
           current={budget?.budget || 0}
@@ -1404,7 +1491,7 @@ export default function App() {
                 <BudgetBar data={budget} onEdit={() => setShowBudgetModal(true)} />
               </div>
               {data
-                ? <HomePage data={data} date={date} setEditTxn={setEditTxn} />
+                ? <HomePage data={data} date={date} setEditTxn={setEditTxn} setAdjustTxn={setAdjustTxn} />
                 : <div style={{ padding: "40px 20px", textAlign: "center" }}>
                     <div style={{ fontSize: 40, marginBottom: 16 }}>📊</div>
                     <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Pick a date & hit Fetch</div>
@@ -1412,7 +1499,7 @@ export default function App() {
                   </div>}
             </div>
           } />
-          <Route path="/transactions" element={<TransactionsPage data={data} setEditTxn={setEditTxn} date={date} />} />
+          <Route path="/transactions" element={<TransactionsPage data={data} setEditTxn={setEditTxn} setAdjustTxn={setAdjustTxn} date={date} />} />
           <Route path="/monthly" element={<MonthlyPage />} />
           <Route path="/insights" element={<InsightsPage />} />
           <Route path="/sms" element={<SmsPage date={date} />} />

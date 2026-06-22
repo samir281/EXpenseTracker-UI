@@ -95,6 +95,28 @@ export async function getOverrides() {
   return result.data.overrides || {};
 }
 
+export async function saveAdjustment(txnHash, date, amount, reason) {
+  const result = await apiFetch("/api/adjustment", {
+    method: "POST",
+    body: JSON.stringify({ txnHash, date, amount, reason }),
+  });
+  if (!result) throw new Error("Login required");
+  const { res, data } = result;
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to save adjustment");
+  return data;
+}
+
+export async function deleteAdjustment(txnHash) {
+  const result = await apiFetch("/api/adjustment", {
+    method: "DELETE",
+    body: JSON.stringify({ txnHash }),
+  });
+  if (!result) throw new Error("Login required");
+  const { res, data } = result;
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to remove adjustment");
+  return data;
+}
+
 export async function submitSMS(text, date) {
   const result = await apiFetch("/api/sms-inbox", {
     method: "POST",
