@@ -349,7 +349,7 @@ function BudgetBar({ data, onEdit }) {
       </div>
 
       <div style={{ height: 8, borderRadius: 4, background: "var(--w10)", overflow: "hidden" }}>
-        <div style={{ width: `${fill}%`, height: "100%", borderRadius: 4, background: `linear-gradient(90deg, ${color}99, ${color})`, transition: "width 0.6s cubic-bezier(0.4,0,0.2,1)" }} />
+        <div className="budget-fill" style={{ width: `${fill}%`, height: "100%", borderRadius: 4, background: color, transition: "width 0.6s cubic-bezier(0.4,0,0.2,1)" }} />
       </div>
 
       <div style={{ fontSize: 11, marginTop: 6, color: over ? "var(--red)" : "var(--w30)" }}>
@@ -1206,9 +1206,6 @@ export default function App() {
           </button>
         </div>
 
-        {/* Monthly budget bar — above the date */}
-        <BudgetBar data={budget} onEdit={() => setShowBudgetModal(true)} />
-
         {/* Date controls — shown on home & transactions, hidden on insights/sms/ai */}
         <DateControls date={date} setDate={setDate} shiftDate={shiftDate} handleFetch={handleFetch} loading={loading} data={data} />
       </div>
@@ -1229,13 +1226,19 @@ export default function App() {
         <PageTransition>
         <Routes>
           <Route path="/" element={
-            data
-              ? <HomePage data={data} date={date} setEditTxn={setEditTxn} />
-              : <div style={{ padding: "60px 20px", textAlign: "center" }} className="fade-in">
-                  <div style={{ fontSize: 40, marginBottom: 16 }}>📊</div>
-                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Pick a date & hit Fetch</div>
-                  <div style={{ fontSize: 13, color: "var(--w30)" }}>Your daily expense report will appear here</div>
-                </div>
+            <div className="fade-in">
+              {/* Monthly budget — home only, scrolls with the page */}
+              <div style={{ padding: "0 20px" }}>
+                <BudgetBar data={budget} onEdit={() => setShowBudgetModal(true)} />
+              </div>
+              {data
+                ? <HomePage data={data} date={date} setEditTxn={setEditTxn} />
+                : <div style={{ padding: "40px 20px", textAlign: "center" }}>
+                    <div style={{ fontSize: 40, marginBottom: 16 }}>📊</div>
+                    <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Pick a date & hit Fetch</div>
+                    <div style={{ fontSize: 13, color: "var(--w30)" }}>Your daily expense report will appear here</div>
+                  </div>}
+            </div>
           } />
           <Route path="/transactions" element={<TransactionsPage data={data} setEditTxn={setEditTxn} />} />
           <Route path="/insights" element={<InsightsPage />} />

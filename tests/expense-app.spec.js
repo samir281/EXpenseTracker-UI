@@ -319,4 +319,14 @@ test("monthly budget bar shows spend vs budget", async ({ page }) => {
   await expect(page.locator("text=June budget")).toBeVisible();
   await expect(page.locator("text=61%")).toBeVisible();
   await expect(page.getByText("of ₹15,000")).toBeVisible();
+
+  // The fill bar must actually render at ~61% with a visible (non-transparent)
+  // background — guards the bug where a CSS var + alpha made the fill invalid.
+  const fill = page.locator(".budget-fill");
+  await expect(fill).toHaveAttribute("style", /width:\s*61%/);
+  const bg = await fill.evaluate(el => getComputedStyle(el).backgroundColor);
+  expect(bg).not.toBe("rgba(0, 0, 0, 0)");
+  expect(bg).not.toBe("transparent");
+  const width = await fill.evaluate(el => el.getBoundingClientRect().width);
+  expect(width).toBeGreaterThan(0);
 });
