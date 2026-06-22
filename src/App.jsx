@@ -995,6 +995,41 @@ function SmsPage({ date }) {
 
 // ─── Insights Page ────────────────────────────────────────────────────────────
 
+// One merchant row in the insights breakdown — tap to expand the individual
+// transactions (when + how much).
+function MerchantRow({ m, last }) {
+  const [open, setOpen] = useState(false);
+  const txns = m.txns || [];
+  const canExpand = txns.length > 0;
+  return (
+    <div style={{ borderBottom: last && !open ? "none" : "1px solid var(--border)" }}>
+      <button onClick={() => canExpand && setOpen(o => !o)}
+        style={{ width: "100%", padding: "12px 0", background: "none", border: "none", cursor: canExpand ? "pointer" : "default", fontFamily: "inherit", color: "inherit", display: "flex", justifyContent: "space-between", alignItems: "center", textAlign: "left" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {canExpand && <ChevronRight size={15} style={{ color: "var(--w30)", transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s", flexShrink: 0 }} />}
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>{m.merchant}</div>
+            <div style={{ fontSize: 11, color: "var(--w30)", marginTop: 2 }}>{m.count} txn{m.count !== 1 ? "s" : ""}{canExpand ? " · tap to view" : ""}</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 500, color: "var(--red)" }}>₹{fmt(m.total)}</div>
+      </button>
+      {open && (
+        <div className="fade-in" style={{ paddingBottom: 10, paddingLeft: 23 }}>
+          {txns.map((t, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderTop: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 12, color: "var(--w50)" }}>
+                {formatDateLong(t.date)}{t.bank ? <span style={{ color: "var(--w30)" }}> · {t.bank}</span> : null}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--red)" }}>₹{fmt(t.amount)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InsightsPage() {
   const pad = n => String(n).padStart(2, "0");
   const today = new Date();
@@ -1092,13 +1127,7 @@ function InsightsPage() {
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 10 }}>By merchant</div>
               <div className="card" style={{ padding: "6px 20px" }}>
                 {result.merchantBreakdown.map((m, i) => (
-                  <div key={i} style={{ padding: "12px 0", borderBottom: i < result.merchantBreakdown.length - 1 ? "1px solid var(--border)" : "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 500 }}>{m.merchant}</div>
-                      <div style={{ fontSize: 11, color: "var(--w30)", marginTop: 2 }}>{m.count} txn{m.count !== 1 ? "s" : ""}</div>
-                    </div>
-                    <div style={{ fontSize: 15, fontWeight: 500, color: "var(--red)" }}>₹{fmt(m.total)}</div>
-                  </div>
+                  <MerchantRow key={i} m={m} last={i === result.merchantBreakdown.length - 1} />
                 ))}
               </div>
             </div>

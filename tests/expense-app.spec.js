@@ -101,7 +101,10 @@ async function mockAPI(page, { wrongPin = false, smsOnly = false } = {}) {
       success: true, from: "2026-05-21", to: "2026-06-20",
       filter: { merchant: "Swiggy", category: null },
       total: 2340, count: 5,
-      merchantBreakdown: [{ merchant: "Swiggy", total: 2340, count: 5 }],
+      merchantBreakdown: [{ merchant: "Swiggy", total: 2340, count: 5, txns: [
+        { date: "2026-06-18", amount: 540, bank: "HDFC" },
+        { date: "2026-06-12", amount: 800, bank: "Kotak" },
+      ] }],
       categoryBreakdown: [],
       dateBreakdown: [],
       cachedDates: ["2026-06-18"],
@@ -327,6 +330,25 @@ test("insights tab shows search form and returns results", async ({ page }) => {
   await expect(page.locator("text=₹2,340").first()).toBeVisible();
   await expect(page.locator("text=By merchant")).toBeVisible();
   await expect(page.locator("text=missing")).toBeVisible();
+});
+
+// ── 20. Expanding a merchant row reveals each transaction (when + how much) ───
+test("tapping a merchant row shows its individual transactions", async ({ page }) => {
+  await mockAPI(page);
+  await login(page);
+  await page.locator(".nav-btn").filter({ hasText: "Insights" }).click();
+  await page.locator("button.chip").filter({ hasText: "Swiggy" }).click();
+  await page.locator("button").filter({ hasText: "Search" }).click();
+  await expect(page.locator("text=By merchant")).toBeVisible({ timeout: 6000 });
+
+  // Per-txn detail is hidden until the row is tapped.
+  await expect(page.getByText("₹540")).toHaveCount(0);
+
+  await page.locator("button").filter({ hasText: "tap to view" }).click();
+
+  // Now the individual transactions (date + amount) are shown.
+  await expect(page.getByText("₹540")).toBeVisible();
+  await expect(page.getByText("₹800")).toBeVisible();
 });
 
 // ── 13. Monthly budget bar shows and updates ─────────────────────────────────
