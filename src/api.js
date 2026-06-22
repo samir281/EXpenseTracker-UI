@@ -117,6 +117,17 @@ export async function deleteAdjustment(txnHash) {
   return data;
 }
 
+export async function addBankSender(email) {
+  const result = await apiFetch("/api/gmail/add-sender", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+  if (!result) throw new Error("Login required");
+  const { res, data } = result;
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to add sender");
+  return data;
+}
+
 export async function submitSMS(text, date) {
   const result = await apiFetch("/api/sms-inbox", {
     method: "POST",

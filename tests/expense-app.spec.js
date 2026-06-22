@@ -34,7 +34,7 @@ const MOCK_REPORT = {
 };
 
 // ── Route interceptor — call this at the start of every test ──────────────────
-async function mockAPI(page, { wrongPin = false } = {}) {
+async function mockAPI(page, { wrongPin = false, smsOnly = false } = {}) {
   // Host-agnostic globs (**/api/...) so mocks intercept whichever backend the
   // frontend targets — Railway in prod builds, or localhost:3001 in dev via
   // .env.local. Tests stay fully mocked and never touch a real database.
@@ -49,7 +49,7 @@ async function mockAPI(page, { wrongPin = false } = {}) {
       return route.fulfill({ status: 400, json: { success: false, message: "Incorrect PIN" } });
     }
     route.fulfill({
-      json: { success: true, token: FAKE_TOKEN, profile: { id: 1, name: "Samir", hasGmail: true } },
+      json: { success: true, token: FAKE_TOKEN, profile: { id: 1, name: "Samir", hasGmail: !smsOnly } },
     });
   });
 
@@ -63,6 +63,10 @@ async function mockAPI(page, { wrongPin = false } = {}) {
 
   await page.route(`**/api/adjustment`, route =>
     route.fulfill({ json: { success: true } })
+  );
+
+  await page.route(`**/api/gmail/add-sender`, route =>
+    route.fulfill({ json: { success: true, label: "BankTransactions", filterAction: "updated", retroTagged: 3 } })
   );
 
   await page.route(`**/api/overrides`, route =>
@@ -439,4 +443,37 @@ test("a transaction with an adjustment shows the strikethrough and reason", asyn
   await expect(swiggyRow.getByText(/refund coming/)).toBeVisible();
   await expect(swiggyRow.getByText("₹350")).toBeVisible();      // effective
   await expect(swiggyRow.getByText("₹450")).toBeVisible();      // struck-through original
+});
+
+// ── 18. "Add a bank" posts the sender email (Gmail profiles) ──────────────────
+test("add a bank sends the sender email to the gmail filter endpoint", async ({ page }) => {
+  await mockAPI(page);
+
+  let body = null;
+  await page.route(`**/api/gmail/add-sender`, route => {
+    body = JSON.parse(route.request().postData() || "{}");
+    route.fulfill({ json: { success: true, label: "BankTransactions", filterAction: "updated", retroTagged: 3 } });
+  });
+
+  await login(page);
+  await page.locator("button").filter({ hasText: "Add a bank" }).click();
+  await expect(page.getByText("Bank's sender email")).toBeVisible();
+
+  await page.locator('input[placeholder*="newbank"]').fill("alerts@newbank.com");
+  await Promise.all([
+    page.waitForRequest(req => req.url().includes("/api/gmail/add-sender") && req.method() === "POST"),
+    page.locator("button").filter({ hasText: "Add bank" }).click(),
+  ]);
+
+  expect(body).toMatchObject({ email: "alerts@newbank.com" });
+  // Success state mentions the back-tagged count.
+  await expect(page.getByText(/Back-tagged 3 past emails/)).toBeVisible();
+});
+
+// ── 19. "Add a bank" is hidden for SMS-only profiles ─────────────────────────
+test("add a bank button is hidden for SMS-only profiles", async ({ page }) => {
+  await mockAPI(page, { smsOnly: true });
+  await login(page);
+  await expect(page.locator("text=Pick a date & hit Fetch")).toBeVisible();
+  await expect(page.locator("button").filter({ hasText: "Add a bank" })).toHaveCount(0);
 });

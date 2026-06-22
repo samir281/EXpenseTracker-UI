@@ -4,9 +4,9 @@ import {
   Wallet, Search, ChevronLeft, ChevronRight, RefreshCw, RotateCw,
   ArrowUpRight, ArrowDownLeft, CreditCard, Sparkles,
   ArrowLeftRight, Send, Loader2, AlertCircle, Pencil, Check, X, Plus,
-  LogOut, MessageSquare, Trash2, BarChart2, Calendar, Download, Scissors,
+  LogOut, MessageSquare, Trash2, BarChart2, Calendar, Download, Scissors, MailPlus,
 } from "lucide-react";
-import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin, submitSMS, fetchSMSInbox, deleteSMSEntry, fetchInsights, fetchBudget, saveBudget, fetchMonthly, saveAdjustment, deleteAdjustment } from "./api";
+import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin, submitSMS, fetchSMSInbox, deleteSMSEntry, fetchInsights, fetchBudget, saveBudget, fetchMonthly, saveAdjustment, deleteAdjustment, addBankSender } from "./api";
 import { getCategoryConfig, CATEGORY_NAMES, fmt, formatDateLong } from "./constants";
 import { exportTable } from "./export";
 
@@ -307,6 +307,65 @@ function AdjustModal({ txn, onSave, onDelete, onClose }) {
             style={{ width: "100%", marginTop: 10, padding: "10px", background: "transparent", color: "var(--red)", border: "1px solid var(--border)", borderRadius: 12, cursor: "pointer", fontSize: 13, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
             <Trash2 size={14} /> Remove cancel-out
           </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AddSenderModal({ onClose }) {
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function handleAdd() {
+    const e = email.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { setError("Enter a valid email address"); return; }
+    setBusy(true); setError(null);
+    try {
+      const r = await addBankSender(e);
+      setResult(r);
+    } catch (err) { setError(err.message); }
+    setBusy(false);
+  }
+
+  return (
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div className="card" style={{ padding: 24, maxWidth: 360, width: "100%" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}><MailPlus size={16} style={{ color: "var(--gold)" }} /> Add a bank</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--w30)" }}><X size={20} /></button>
+        </div>
+
+        {result ? (
+          <div className="fade-in">
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: "var(--green-bg, rgba(34,197,94,0.15))", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+              <Check size={24} style={{ color: "var(--green)" }} />
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>
+              {result.filterAction === "exists" ? "Already in your filter" : "Sender added"}
+            </div>
+            <div style={{ fontSize: 13, color: "var(--w50)", lineHeight: 1.6 }}>
+              Future emails from this bank will be tagged automatically.
+              {result.retroTagged > 0 && ` Back-tagged ${result.retroTagged} past email${result.retroTagged === 1 ? "" : "s"} — fetch those dates to see them.`}
+            </div>
+            <button onClick={onClose} style={{ width: "100%", marginTop: 18, padding: "12px", background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 12, cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "inherit" }}>Done</button>
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, color: "var(--w50)", marginBottom: 8 }}>Bank's sender email</div>
+            <input value={email} onChange={e => { setEmail(e.target.value); setError(null); }} placeholder="e.g. alerts@newbank.com" style={{ width: "100%", marginBottom: 8 }} autoFocus />
+            <div style={{ fontSize: 11, color: "var(--w30)", marginBottom: 16, lineHeight: 1.6 }}>
+              The address your bank sends transaction alerts from. It's added to your Gmail label filter, and past emails from it are tagged too.
+            </div>
+            {error && <div style={{ fontSize: 12, color: "var(--red)", marginBottom: 12 }}>{error}</div>}
+            <button onClick={handleAdd} disabled={busy}
+              style={{ width: "100%", padding: "12px", background: "var(--gold)", color: "#0A0A0A", border: "none", borderRadius: 12, cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: busy ? 0.5 : 1 }}>
+              {busy ? <Loader2 size={16} className="spin" /> : <MailPlus size={16} />}
+              {busy ? "Adding..." : "Add bank"}
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -1324,6 +1383,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [editTxn, setEditTxn] = useState(null);
   const [adjustTxn, setAdjustTxn] = useState(null);
+  const [showAddSender, setShowAddSender] = useState(false);
   const [budget, setBudget] = useState(null);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
 
@@ -1429,6 +1489,7 @@ export default function App() {
           onClose={() => setAdjustTxn(null)}
         />
       )}
+      {showAddSender && <AddSenderModal onClose={() => setShowAddSender(false)} />}
       {showBudgetModal && (
         <BudgetModal
           current={budget?.budget || 0}
@@ -1489,6 +1550,13 @@ export default function App() {
               {/* Monthly budget — home only, scrolls with the page */}
               <div style={{ padding: "0 20px" }}>
                 <BudgetBar data={budget} onEdit={() => setShowBudgetModal(true)} />
+                {/* Add a new bank's sender to Gmail — Gmail-connected profiles only */}
+                {currentProfile?.hasGmail !== false && (
+                  <button onClick={() => setShowAddSender(true)}
+                    style={{ width: "100%", marginBottom: 16, padding: "11px", background: "var(--card)", border: "1px dashed var(--border)", borderRadius: 12, color: "var(--gold)", cursor: "pointer", fontSize: 13, fontWeight: 500, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    <MailPlus size={16} /> Add a bank
+                  </button>
+                )}
               </div>
               {data
                 ? <HomePage data={data} date={date} setEditTxn={setEditTxn} setAdjustTxn={setAdjustTxn} />
