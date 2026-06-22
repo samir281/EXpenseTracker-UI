@@ -4,10 +4,11 @@ import {
   Wallet, Search, ChevronLeft, ChevronRight, RefreshCw, RotateCw,
   ArrowUpRight, ArrowDownLeft, CreditCard, Sparkles,
   ArrowLeftRight, Send, Loader2, AlertCircle, Pencil, Check, X, Plus,
-  LogOut, MessageSquare, Trash2, BarChart2,
+  LogOut, MessageSquare, Trash2, BarChart2, Calendar, Download,
 } from "lucide-react";
-import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin, submitSMS, fetchSMSInbox, deleteSMSEntry, fetchInsights, fetchBudget, saveBudget } from "./api";
+import { fetchReport, askAI, saveOverride, fetchProfiles, verifyPin, submitSMS, fetchSMSInbox, deleteSMSEntry, fetchInsights, fetchBudget, saveBudget, fetchMonthly } from "./api";
 import { getCategoryConfig, CATEGORY_NAMES, fmt, formatDateLong } from "./constants";
+import { exportTable } from "./export";
 
 // ─── Auth Screens ─────────────────────────────────────────────────────────────
 
@@ -503,10 +504,11 @@ function HomePage({ data, date, setEditTxn }) {
 
 // ─── Transactions Page ────────────────────────────────────────────────────────
 
-function TransactionsPage({ data, setEditTxn }) {
+function TransactionsPage({ data, setEditTxn, date }) {
   const [search, setSearch] = useState("");
   const [fType, setFType] = useState("all");
   const [fBank, setFBank] = useState("all");
+  const [showExport, setShowExport] = useState(false);
 
   if (!data) {
     return (
@@ -530,21 +532,40 @@ function TransactionsPage({ data, setEditTxn }) {
     return true;
   });
 
+  function handleExport(fmt) {
+    setShowExport(false);
+    if (filtered.length === 0) return;
+    const headers = ["Date", "Merchant", "Category", "Type", "Amount", "Bank", "Card", "Time"];
+    const rows = filtered.map(t => [
+      date, t.merchant, t.category, t.type, t.amount, t.bank || "", t.cardType || "", t.time || "",
+    ]);
+    exportTable(fmt, {
+      filename: `transactions-${date}`,
+      title: `Transactions — ${date} (amounts in INR)`,
+      headers, rows,
+    }).catch(e => alert("Export failed: " + e.message));
+  }
+
   return (
     <div style={{ padding: "0 20px" }} className="fade-in">
+      {showExport && <ExportMenu onPick={handleExport} onClose={() => setShowExport(false)} />}
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <div style={{ flex: 1, position: "relative" }}>
           <Search size={15} style={{ position: "absolute", left: 14, top: 12, color: "var(--w30)" }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." style={{ width: "100%", paddingLeft: 36 }} />
         </div>
-        <select value={fType} onChange={e => setFType(e.target.value)} style={{ width: 90, paddingRight: 8 }}>
+        <select value={fType} onChange={e => setFType(e.target.value)} style={{ width: 80, paddingRight: 8 }}>
           <option value="all">All</option><option value="debit">Spent</option>
           <option value="credit">Received</option><option value="bill">Bills</option>
         </select>
-        <select value={fBank} onChange={e => setFBank(e.target.value)} style={{ width: 90, paddingRight: 8 }}>
-          <option value="all">All banks</option>
+        <select value={fBank} onChange={e => setFBank(e.target.value)} style={{ width: 80, paddingRight: 8 }}>
+          <option value="all">Banks</option>
           {bankList.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
+        <button onClick={() => setShowExport(true)} disabled={filtered.length === 0} title="Export"
+          style={{ width: 40, flexShrink: 0, borderRadius: 12, background: "var(--gold-dim)", border: "1px solid var(--gold)", color: "var(--gold)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: filtered.length === 0 ? 0.4 : 1 }}>
+          <Download size={16} />
+        </button>
       </div>
       <div style={{ fontSize: 12, color: "var(--w30)", marginBottom: 14 }}>
         {filtered.length} transaction{filtered.length !== 1 ? "s" : ""}
@@ -555,6 +576,156 @@ function TransactionsPage({ data, setEditTxn }) {
           : filtered.map((t, i) => <TransactionRow key={i} txn={t} onEditCategory={setEditTxn} />)
         }
       </div>
+    </div>
+  );
+}
+
+// ─── Export format picker ─────────────────────────────────────────────────────
+
+function ExportMenu({ onPick, onClose }) {
+  const opts = [
+    { fmt: "csv", label: "CSV", desc: "Comma-separated (.csv)" },
+    { fmt: "excel", label: "Excel", desc: "Spreadsheet (.xlsx)" },
+    { fmt: "pdf", label: "PDF", desc: "Document (.pdf)" },
+  ];
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div className="card" onClick={e => e.stopPropagation()} style={{ padding: 20, maxWidth: 320, width: "100%" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 16, fontWeight: 500 }}>Export as</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--w30)" }}><X size={20} /></button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {opts.map(o => (
+            <button key={o.fmt} onClick={() => onPick(o.fmt)}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "var(--w10)", border: "1px solid var(--border)", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+              <div style={{ width: 34, height: 34, borderRadius: 9, background: "var(--gold-dim)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Download size={16} style={{ color: "var(--gold)" }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "var(--w)" }}>{o.label}</div>
+                <div style={{ fontSize: 11, color: "var(--w30)" }}>{o.desc}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Monthly Page ─────────────────────────────────────────────────────────────
+
+function MonthlyPage() {
+  const pad = n => String(n).padStart(2, "0");
+  const now = new Date();
+  const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() + 1 });
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [showExport, setShowExport] = useState(false);
+
+  const monthStr = `${ym.y}-${pad(ym.m)}`;
+  const monthLabel = new Date(ym.y, ym.m - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true); setError(null);
+    fetchMonthly(monthStr)
+      .then(d => { if (active) setResult(d); })
+      .catch(e => { if (active) setError(e.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [monthStr]);
+
+  function shiftMonth(delta) {
+    setYm(({ y, m }) => {
+      let nm = m + delta, ny = y;
+      if (nm < 1) { nm = 12; ny--; }
+      if (nm > 12) { nm = 1; ny++; }
+      return { y: ny, m: nm };
+    });
+  }
+
+  function handleExport(fmt) {
+    setShowExport(false);
+    if (!result || result.days.length === 0) return;
+    const headers = ["Date", "In", "Out", "Bill Payment"];
+    const rows = result.days.map(d => [d.date, d.in, d.out, d.bill]);
+    rows.push(["Total", result.totals.in, result.totals.out, result.totals.bill]);
+    exportTable(fmt, {
+      filename: `expenses-${monthStr}`,
+      title: `Expenses — ${monthLabel} (amounts in INR)`,
+      headers, rows,
+    }).catch(e => alert("Export failed: " + e.message));
+  }
+
+  const days = result?.days || [];
+  const totals = result?.totals || { in: 0, out: 0, bill: 0 };
+
+  return (
+    <div style={{ padding: "0 20px" }} className="fade-in">
+      {showExport && <ExportMenu onPick={handleExport} onClose={() => setShowExport(false)} />}
+
+      {/* Month selector + export */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+        <button onClick={() => shiftMonth(-1)} style={{ width: 34, height: 34, borderRadius: 9, background: "var(--card)", border: "1px solid var(--border)", color: "var(--w50)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><ChevronLeft size={18} /></button>
+        <div style={{ flex: 1, textAlign: "center", fontSize: 15, fontWeight: 500 }}>{monthLabel}</div>
+        <button onClick={() => shiftMonth(1)} style={{ width: 34, height: 34, borderRadius: 9, background: "var(--card)", border: "1px solid var(--border)", color: "var(--w50)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><ChevronRight size={18} /></button>
+        <button onClick={() => setShowExport(true)} disabled={days.length === 0} title="Export"
+          style={{ width: 34, height: 34, borderRadius: 9, background: "var(--gold-dim)", border: "1px solid var(--gold)", color: "var(--gold)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: days.length === 0 ? 0.4 : 1 }}>
+          <Download size={16} />
+        </button>
+      </div>
+
+      {loading && <div style={{ textAlign: "center", padding: 40 }}><Loader2 size={24} className="spin" style={{ color: "var(--gold)" }} /></div>}
+      {error && <div style={{ padding: "12px 16px", background: "var(--red-bg)", borderRadius: 12, color: "var(--red)", fontSize: 13 }}>{error}</div>}
+
+      {!loading && !error && (
+        <>
+          {/* Totals summary */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+            <SummaryCard icon={ArrowDownLeft} label="In" value={totals.in} colorVar="green" />
+            <SummaryCard icon={ArrowUpRight} label="Out" value={totals.out} colorVar="red" />
+            <SummaryCard icon={CreditCard} label="Bills" value={totals.bill} colorVar="blue" />
+          </div>
+
+          {days.length === 0 ? (
+            <div className="card" style={{ padding: "40px 20px", textAlign: "center", color: "var(--w30)", fontSize: 13 }}>
+              No transactions cached for {monthLabel}.
+            </div>
+          ) : (
+            <div className="card" style={{ overflow: "hidden" }}>
+              {/* header row */}
+              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr", padding: "12px 16px", borderBottom: "1px solid var(--border)", fontSize: 11, color: "var(--w30)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                <div>Date</div>
+                <div style={{ textAlign: "right", color: "var(--green)" }}>In</div>
+                <div style={{ textAlign: "right", color: "var(--red)" }}>Out</div>
+                <div style={{ textAlign: "right", color: "var(--blue)" }}>Bill</div>
+              </div>
+              {days.map((d, i) => {
+                const day = new Date(d.date + "T00:00:00");
+                const label = `${day.getDate()} ${day.toLocaleString("en-US", { weekday: "short" })}`;
+                return (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr", padding: "11px 16px", borderBottom: i < days.length - 1 ? "1px solid var(--w10)" : "none", fontSize: 13, alignItems: "center" }}>
+                    <div style={{ fontWeight: 500 }}>{label}</div>
+                    <div style={{ textAlign: "right", color: d.in ? "var(--green)" : "var(--w10)" }}>{d.in ? fmt(d.in) : "—"}</div>
+                    <div style={{ textAlign: "right", color: d.out ? "var(--w80)" : "var(--w10)" }}>{d.out ? fmt(d.out) : "—"}</div>
+                    <div style={{ textAlign: "right", color: d.bill ? "var(--blue)" : "var(--w10)" }}>{d.bill ? fmt(d.bill) : "—"}</div>
+                  </div>
+                );
+              })}
+              {/* totals row */}
+              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr", padding: "12px 16px", borderTop: "1px solid var(--border)", fontSize: 13, fontWeight: 600, background: "var(--w10)" }}>
+                <div>Total</div>
+                <div style={{ textAlign: "right", color: "var(--green)" }}>{fmt(totals.in)}</div>
+                <div style={{ textAlign: "right", color: "var(--red)" }}>{fmt(totals.out)}</div>
+                <div style={{ textAlign: "right", color: "var(--blue)" }}>{fmt(totals.bill)}</div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -972,6 +1143,7 @@ function BottomNav() {
   const items = [
     { path: "/", label: "Home", icon: Wallet },
     { path: "/transactions", label: "Activity", icon: ArrowLeftRight },
+    { path: "/monthly", label: "Monthly", icon: Calendar },
     { path: "/insights", label: "Insights", icon: BarChart2 },
     { path: "/sms", label: "SMS", icon: MessageSquare },
     { path: "/ai", label: "AI", icon: Sparkles },
@@ -1240,7 +1412,8 @@ export default function App() {
                   </div>}
             </div>
           } />
-          <Route path="/transactions" element={<TransactionsPage data={data} setEditTxn={setEditTxn} />} />
+          <Route path="/transactions" element={<TransactionsPage data={data} setEditTxn={setEditTxn} date={date} />} />
+          <Route path="/monthly" element={<MonthlyPage />} />
           <Route path="/insights" element={<InsightsPage />} />
           <Route path="/sms" element={<SmsPage date={date} />} />
           <Route path="/ai" element={<AiPage data={data} msgs={msgs} setMsgs={setMsgs} inp={inp} setInp={setInp} busy={busy} handleAsk={handleAsk} />} />

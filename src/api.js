@@ -118,6 +118,14 @@ export async function deleteSMSEntry(id) {
   return result.data;
 }
 
+export async function fetchMonthly(month) {
+  const result = await apiFetch(`/api/monthly?month=${month}`);
+  if (!result) throw new Error("Login required");
+  const { res, data } = result;
+  if (!res.ok || !data.success) throw new Error(data.message || "Failed to load monthly data");
+  return data;
+}
+
 export async function fetchBudget() {
   const result = await apiFetch("/api/budget");
   if (!result) throw new Error("Login required");

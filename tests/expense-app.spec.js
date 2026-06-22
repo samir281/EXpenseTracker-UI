@@ -77,6 +77,17 @@ async function mockAPI(page, { wrongPin = false } = {}) {
     route.fulfill({ json: { success: true, budget: 15000, spent: 9200, monthLabel: "June" } })
   );
 
+  await page.route(`**/api/monthly**`, route =>
+    route.fulfill({ json: {
+      success: true, month: "2026-06",
+      days: [
+        { date: "2026-06-15", in: 2205, out: 2664, bill: 0 },
+        { date: "2026-06-19", in: 15854, out: 1841, bill: 14807 },
+      ],
+      totals: { in: 18059, out: 4505, bill: 14807 },
+    }})
+  );
+
   await page.route(`**/api/insights**`, route =>
     route.fulfill({ json: {
       success: true, from: "2026-05-21", to: "2026-06-20",
@@ -329,4 +340,42 @@ test("monthly budget bar shows spend vs budget", async ({ page }) => {
   expect(bg).not.toBe("transparent");
   const width = await fill.evaluate(el => el.getBoundingClientRect().width);
   expect(width).toBeGreaterThan(0);
+});
+
+// ── 14. Monthly page shows daily table + export menu ─────────────────────────
+test("monthly page shows table and export options", async ({ page }) => {
+  await mockAPI(page);
+  await login(page);
+
+  await page.locator(".nav-btn").filter({ hasText: "Monthly" }).click();
+
+  // Totals cards + a day row from the mock
+  await expect(page.getByText("Bills", { exact: true })).toBeVisible();
+  await expect(page.locator("text=4,505").first()).toBeVisible(); // total out
+  await expect(page.locator("text=14,807").first()).toBeVisible(); // bill
+
+  // Export menu opens with all three formats
+  await page.locator('button[title="Export"]').click();
+  await expect(page.getByText("Export as")).toBeVisible();
+  await expect(page.getByText("CSV", { exact: true })).toBeVisible();
+  await expect(page.getByText("Excel", { exact: true })).toBeVisible();
+  await expect(page.getByText("PDF", { exact: true })).toBeVisible();
+});
+
+// ── 15. Activity page can export the day's transactions (CSV download) ────────
+test("activity page exports transactions as CSV", async ({ page }) => {
+  await mockAPI(page);
+  await login(page);
+  await page.locator("button").filter({ hasText: "Fetch" }).click();
+  await expect(page.locator("text=Swiggy")).toBeVisible();
+
+  await page.locator(".nav-btn").filter({ hasText: "Activity" }).click();
+  await page.locator('button[title="Export"]').click();
+  await expect(page.getByText("Export as")).toBeVisible();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByText("CSV", { exact: true }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/transactions-.*\.csv/);
 });

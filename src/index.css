@@ -152,17 +152,17 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  padding: 9px 16px;
+  padding: 9px 11px;
   background: transparent;
   border: none;
   border-radius: 34px;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 9.5px;
   font-family: inherit;
   color: rgba(255, 255, 255, 0.3);
   transition: color 0.2s, background 0.2s;
   text-decoration: none;
-  min-width: 58px;
+  min-width: 0;
 }
 
 .nav-btn:hover {
