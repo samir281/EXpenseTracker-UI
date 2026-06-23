@@ -1332,11 +1332,23 @@ function BottomNav() {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
+// Log out if the app has been backgrounded / closed for longer than this.
+// Survives minimise, app-switch, and swipe-to-kill via a persisted timestamp.
+const AWAY_TIMEOUT = 60 * 1000;
+
 export default function App() {
   const [authView, setAuthView] = useState(() => {
     const token = localStorage.getItem("token");
     const profile = localStorage.getItem("profile");
-    return token && profile ? "dashboard" : "profiles";
+    if (!token || !profile) return "profiles";
+    // Cold start (e.g. after swipe-to-kill): if we were away past the limit,
+    // force re-login. "awayAt" is stamped whenever the app goes to background.
+    const awayAt = Number(localStorage.getItem("awayAt") || 0);
+    if (awayAt && Date.now() - awayAt > AWAY_TIMEOUT) {
+      localStorage.clear();
+      return "profiles";
+    }
+    return "dashboard";
   });
   const [currentProfile, setCurrentProfile] = useState(() => {
     try { return JSON.parse(localStorage.getItem("profile")); } catch { return null; }
@@ -1378,12 +1390,39 @@ export default function App() {
     };
   }, [authView]);
 
+  // Log out when the app is backgrounded/closed for longer than AWAY_TIMEOUT.
+  // We stamp "awayAt" the moment we go to background (visibilitychange/pagehide,
+  // which fire before iOS freezes JS), then on return — or on the next cold
+  // start (handled in the authView initialiser) — check how long we were away.
+  useEffect(() => {
+    if (authView !== "dashboard") return;
+    function markAway() {
+      localStorage.setItem("awayAt", String(Date.now()));
+    }
+    function onVisibility() {
+      if (document.visibilityState === "hidden") {
+        markAway();
+      } else {
+        const awayAt = Number(localStorage.getItem("awayAt") || 0);
+        localStorage.removeItem("awayAt");
+        if (awayAt && Date.now() - awayAt > AWAY_TIMEOUT) handleLogout();
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", markAway);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", markAway);
+    };
+  }, [authView]);
+
   function handleProfileSelect(profile) {
     setPendingProfile(profile);
     setAuthView("pin");
   }
 
   function handlePinSuccess(profile) {
+    localStorage.removeItem("awayAt");
     setCurrentProfile(profile);
     setAuthView("dashboard");
   }

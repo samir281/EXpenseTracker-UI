@@ -332,7 +332,24 @@ test("insights tab shows search form and returns results", async ({ page }) => {
   await expect(page.locator("text=missing")).toBeVisible();
 });
 
-// ── 20. Expanding a merchant row reveals each transaction (when + how much) ───
+// ── 21. Being away past the limit logs out on reopen (background/kill) ────────
+test("reopening after being away too long forces re-login", async ({ page }) => {
+  await mockAPI(page);
+  await login(page);
+  await expect(page.locator("text=Pick a date & hit Fetch")).toBeVisible();
+
+  // Simulate having been backgrounded/killed > 1 min ago. addInitScript wins over
+  // the pagehide stamp because it runs before the app code on the next load.
+  await page.addInitScript(() => localStorage.setItem("awayAt", String(Date.now() - 2 * 60 * 1000)));
+  await page.reload();
+
+  // Should be back at the profile picker, session cleared.
+  await expect(page.locator("text=Who's tracking?")).toBeVisible();
+  const token = await page.evaluate(() => localStorage.getItem("token"));
+  expect(token).toBeNull();
+});
+
+// ── 22. Expanding a merchant row reveals each transaction (when + how much) ───
 test("tapping a merchant row shows its individual transactions", async ({ page }) => {
   await mockAPI(page);
   await login(page);
