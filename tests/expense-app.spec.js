@@ -368,6 +368,34 @@ test("tapping a merchant row shows its individual transactions", async ({ page }
   await expect(page.getByText("₹800")).toBeVisible();
 });
 
+// ── 23. AI-parsed transactions are flagged (badge + drift banner) ─────────────
+test("transactions parsed by AI fallback show an AI badge and a drift banner", async ({ page }) => {
+  await mockAPI(page);
+  // One txn came through the AI fallback (format AI_FALLBACK).
+  await page.route(`**/api/report**`, route =>
+    route.fulfill({ json: {
+      ...MOCK_REPORT,
+      transactions: [
+        { ...MOCK_REPORT.transactions[0], format: "AI_FALLBACK" },
+        MOCK_REPORT.transactions[1],
+        MOCK_REPORT.transactions[2],
+      ],
+    }})
+  );
+
+  await login(page);
+  await page.locator("button").filter({ hasText: "Fetch" }).click();
+  await expect(page.locator("text=Swiggy")).toBeVisible();
+
+  // Drift banner appears with the count.
+  await expect(page.getByText(/1 transaction parsed by AI/)).toBeVisible();
+  // The Swiggy row carries the AI badge; Zepto (regex) does not.
+  const swiggyRow = page.locator(".txn-row").filter({ hasText: "Swiggy" });
+  await expect(swiggyRow.getByText("AI", { exact: true })).toBeVisible();
+  const zeptoRow = page.locator(".txn-row").filter({ hasText: "Zepto" });
+  await expect(zeptoRow.getByText("AI", { exact: true })).toHaveCount(0);
+});
+
 // ── 13. Monthly budget bar shows and updates ─────────────────────────────────
 test("monthly budget bar shows spend vs budget", async ({ page }) => {
   await mockAPI(page);

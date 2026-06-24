@@ -221,6 +221,7 @@ function TransactionRow({ txn, onEditCategory, onAdjust }) {
         <div style={{ fontSize: 12, color: "var(--w30)", marginTop: 2 }}>
           {txn.category}
           {isBill && <span className="pill" style={{ background: "var(--blue-bg)", color: "var(--blue)", marginLeft: 6 }}>BILL</span>}
+          {txn.format === "AI_FALLBACK" && <span className="pill" style={{ background: "var(--gold-dim)", color: "var(--gold)", marginLeft: 6 }} title="Parsed by AI fallback — the bank's format changed; please verify">AI</span>}
           {" · "}{txn.bank} · {txn.cardType} · {txn.time || "—"}
         </div>
         {txn.merchantVPA && <div style={{ fontSize: 11, color: "var(--w10)", marginTop: 2 }}>{txn.merchantVPA}</div>}
@@ -557,6 +558,8 @@ function HomePage({ data, date, setEditTxn, setAdjustTxn }) {
   const bills = data?.billPayments || [];
   const categories = data?.categories || [];
   const maxCat = categories[0]?.total || 1;
+  // Drift signal: how many txns fell back to the AI parser (a bank format changed).
+  const aiCount = [...txns, ...bills].filter(t => t.format === "AI_FALLBACK").length;
 
   if (txns.length === 0 && bills.length === 0) {
     return (
@@ -581,6 +584,14 @@ function HomePage({ data, date, setEditTxn, setAdjustTxn }) {
           {summary.totalBillPayment > 0 && <span style={{ color: "var(--blue)", marginLeft: 6 }}>· excl. ₹{fmt(summary.totalBillPayment)} bills</span>}
         </div>
       </div>
+
+      {/* AI-fallback drift notice — a bank's email format changed; these need a glance */}
+      {aiCount > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "var(--gold-dim)", border: "1px solid var(--gold)33", borderRadius: 12, marginBottom: 14, fontSize: 12, color: "var(--gold)" }}>
+          <Sparkles size={14} style={{ flexShrink: 0 }} />
+          <span>{aiCount} transaction{aiCount !== 1 ? "s" : ""} parsed by AI (marked <b>AI</b>) — a bank changed its email format. Please verify the amount/merchant.</span>
+        </div>
+      )}
 
       {/* Summary mini-cards */}
       {(() => {
